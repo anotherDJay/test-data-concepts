@@ -245,13 +245,13 @@ def get_site_info(site_id: str) -> Optional[Dict[str, Any]]:
     if coords is not None:
         lon = lat = None
         if isinstance(coords, (list, tuple)) and len(coords) >= 2:
-            lon, lat = float(coords[0]), float(coords[1])
+            lat, lng = float(coords[0]), float(coords[1])
         elif isinstance(coords, str):
             m = re.search(r"(-?\d+(?:\.\d+)?)[^\d-]+(-?\d+(?:\.\d+)?)", coords)
             if m:
-                lon, lat = float(m.group(1)), float(m.group(2))
-        if lat is not None and lon is not None:
-            tz = TF.timezone_at(lng=lon, lat=lat)
+                lat, lng = float(m.group(1)), float(m.group(2))
+        if lat is not None and lng is not None:
+            tz = TF.timezone_at(lng=lng, lat=lat)
 
     return {
         "address": row["address"],
@@ -321,10 +321,12 @@ def score_week(W: float, T: float) -> int:
 # --------------------------------------------------
 # Insight Helpers
 # --------------------------------------------------
-def validate_and_clean(df: pd.DataFrame) -> pd.DataFrame:
+def validate_and_clean(df: pd.DataFrame, tz_str: str = "UTC") -> pd.DataFrame:
     assert {"ts", "cons_kwh"}.issubset(df.columns), "Missing ts or cons_kwh"
     df2 = df.rename(columns={"ts": "timestamp", "cons_kwh": "import_kwh"}).copy()
     df2 = df2.sort_values("timestamp")
+    # Ensure timestamp is timezone-aware
+    df2["timestamp"] = pd.to_datetime(df2["timestamp"], utc=True).dt.tz_convert(tz_str)
     df2["import_kwh"] = df2["import_kwh"].fillna(0)
     df2["export_kwh"] = df2.get("prod_kwh", 0).fillna(0)
     df2["net_kwh"]    = df2["import_kwh"] - df2["export_kwh"]
@@ -417,6 +419,9 @@ def render_markdown(parts: Dict[str, Any], site_info: Optional[Dict[str, Any]]) 
         md.append(f"- **City:** {site_info['city']}")
         md.append(f"- **State:** {site_info['state']}")
         md.append(f"- **ZIP:** {site_info['zip']}")
+        # Add time zone info if available
+        if "timezone" in site_info and site_info["timezone"]:
+            md.append(f"- **Time Zone:** {site_info['timezone']}")
         md.append("")
 
     md.append("### 1  Big-picture numbers")
@@ -457,8 +462,8 @@ def render_markdown(parts: Dict[str, Any], site_info: Optional[Dict[str, Any]]) 
     return "\n".join(md)
 
 @st.cache_data
-def compute_insights_report(df: pd.DataFrame, site_id: str, site_info: Optional[Dict[str, Any]]) -> str:
-    df2    = validate_and_clean(df)
+def compute_insights_report(df: pd.DataFrame, site_id: str, site_info: Optional[Dict[str, Any]], tz_str: str = "UTC") -> str:
+    df2    = validate_and_clean(df, tz_str)
     stats  = high_level_stats(df2)
     common = weekday_heaviest_3h(df2)
     anom   = anomaly_scan(df2)
@@ -532,14 +537,15 @@ def main():
 
         st.subheader("Hourly Consumption vs Production")
         chart = df.set_index("ts")[['cons_kwh', 'prod_kwh']]
+        chart.index = pd.to_datetime(chart.index, utc=True).tz_convert(tz_str)  # Ensure tz-aware
         chart.columns = ["Consumption", "Production"]
         st.line_chart(chart)
 
         if st.button("Generate Weekly Insights"):
-            md = compute_insights_report(df, site, site_info)
+            md = compute_insights_report(df, site, site_info, tz_str)
             st.markdown(md, unsafe_allow_html=True)
 
-            df2 = validate_and_clean(df)
+            df2 = validate_and_clean(df, tz_str)
             st.subheader("Average Daily Consumption Profile (kWh/hour)")
             st.line_chart(hourly_profile(df2).set_index("hour")["avg_import_kwh"])
 
