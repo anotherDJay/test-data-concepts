@@ -3,6 +3,9 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta, date
 from typing import Optional, Dict, Any
+import re
+from zoneinfo import ZoneInfo
+from timezonefinder import TimezoneFinder
 
 # Snowpark imports
 from snowflake.snowpark.session import Session
@@ -42,6 +45,9 @@ BUBBLE_CSS = """
   .empty{background:#F0F0F0;border:1px solid #e5e5e5;}
 </style>
 """
+
+# Timezone lookup helper
+TF = TimezoneFinder()
 
 def bubble_grid(W: float, T: float) -> str:
     """
@@ -108,7 +114,7 @@ def get_sites() -> list:
 
 
 @st.cache_data
-def load_week_data(site_id: str, week_start: date) -> Optional[pd.DataFrame]:
+def load_week_data(site_id: str, week_start: date, tz_str: str = "UTC") -> Optional[pd.DataFrame]:
     """
     Load one week of consumption + production data for a given site.
     Returns a pandas DataFrame with columns:
@@ -160,8 +166,8 @@ def load_week_data(site_id: str, week_start: date) -> Optional[pd.DataFrame]:
     # Lowercase column names
     df.columns = [c.lower() for c in df.columns]
 
-    # Convert timestamps and sort
-    df["ts"] = pd.to_datetime(df["ts"])
+    # Convert timestamps from UTC to local timezone and sort
+    df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(tz_str)
     df = df.sort_values("ts").reset_index(drop=True)
 
     # Fill missing consumption/production with 0
@@ -173,13 +179,13 @@ def load_week_data(site_id: str, week_start: date) -> Optional[pd.DataFrame]:
 
 
 @st.cache_data
-def compute_target(site_id: str, week_start: date) -> float:
+def compute_target(site_id: str, week_start: date, tz_str: str = "UTC") -> float:
     """
     Compute the target T for the current week based on last week's net.
     If last-week’s |T| <= FLOOR_ABS_KWH, clamp to ±FLOOR_ABS_KWH.
     """
     prev_start = week_start - timedelta(days=7)
-    df_prev = load_week_data(site_id, prev_start)
+    df_prev = load_week_data(site_id, prev_start, tz_str)
 
     T = df_prev["kwh"].sum() if (df_prev is not None) else 0.0
 
@@ -234,7 +240,26 @@ def get_site_info(site_id: str) -> Optional[Dict[str, Any]]:
         return None
 
     row = df.iloc[0]
-    return {"address": row["address"], "city": row["city"], "state": row["state"], "zip": row["zip"]}
+    tz = None
+    coords = row.get("coordinates")
+    if coords is not None:
+        lon = lat = None
+        if isinstance(coords, (list, tuple)) and len(coords) >= 2:
+            lon, lat = float(coords[0]), float(coords[1])
+        elif isinstance(coords, str):
+            m = re.search(r"(-?\d+(?:\.\d+)?)[^\d-]+(-?\d+(?:\.\d+)?)", coords)
+            if m:
+                lon, lat = float(m.group(1)), float(m.group(2))
+        if lat is not None and lon is not None:
+            tz = TF.timezone_at(lng=lon, lat=lat)
+
+    return {
+        "address": row["address"],
+        "city": row["city"],
+        "state": row["state"],
+        "zip": row["zip"],
+        "timezone": tz if tz else "UTC",
+    }
 
 # --------------------------------------------------
 # Weekly Score Algorithm Constants
@@ -432,13 +457,12 @@ def render_markdown(parts: Dict[str, Any], site_info: Optional[Dict[str, Any]]) 
     return "\n".join(md)
 
 @st.cache_data
-def compute_insights_report(df: pd.DataFrame, site_id: str) -> str:
+def compute_insights_report(df: pd.DataFrame, site_id: str, site_info: Optional[Dict[str, Any]]) -> str:
     df2    = validate_and_clean(df)
     stats  = high_level_stats(df2)
     common = weekday_heaviest_3h(df2)
     anom   = anomaly_scan(df2)
     opp    = opportunity_report(df2, stats)
-    site_info = get_site_info(site_id)
 
     parts = {
         "stats": stats,
@@ -470,21 +494,27 @@ def main():
     week_start = st.date_input("Week start (Sunday)", default_sun)
 
     if st.button("Load Week"):
-        df = load_week_data(site, week_start)
+        site_info = get_site_info(site)
+        tz_str = site_info.get("timezone", "UTC") if site_info else "UTC"
+        df = load_week_data(site, week_start, tz_str)
         if df is None or df["kwh"].abs().sum() == 0:
             st.error("No data for selected week.")
             return
 
-        T = compute_target(site, week_start)
+        T = compute_target(site, week_start, tz_str)
         st.session_state.df = df
         st.session_state.T = T
+        st.session_state.site_info = site_info
+        st.session_state.tz = tz_str
         st.session_state.idx = 0
 
     if "df" in st.session_state:
-        df, T, idx = (
+        df, T, idx, site_info, tz_str = (
             st.session_state.df,
             st.session_state.T,
             st.session_state.idx,
+            st.session_state.site_info,
+            st.session_state.tz,
         )
 
         idx = st.slider("Hour of Week", min_value=0, max_value=len(df) - 1, value=idx)
@@ -506,7 +536,7 @@ def main():
         st.line_chart(chart)
 
         if st.button("Generate Weekly Insights"):
-            md = compute_insights_report(df, site)
+            md = compute_insights_report(df, site, site_info)
             st.markdown(md, unsafe_allow_html=True)
 
             df2 = validate_and_clean(df)
