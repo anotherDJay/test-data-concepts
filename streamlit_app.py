@@ -274,15 +274,8 @@ def get_site_info(site_id: str) -> Optional[Dict[str, Any]]:
 
     try:
         df = session.sql(query).to_pandas()
-        # Debug print: show entire DataFrame and its columns before renaming
-        st.write("--- Debug: raw site_info DataFrame ---")
-        st.write(df)
-        st.write("Raw Columns:", df.columns.tolist())
         # Normalize column names to lowercase
         df.columns = [c.lower() for c in df.columns]
-        st.write("--- Debug: normalized site_info DataFrame ---")
-        st.write(df)
-        st.write("Normalized Columns:", df.columns.tolist())
     except Exception as e:
         st.error(f"Error fetching site info: {e}")
         return None
