@@ -6,6 +6,8 @@ from typing import Optional, Dict, Any
 import re
 from zoneinfo import ZoneInfo
 from timezonefinder import TimezoneFinder
+from svg_wedges import WEDGE_DATA_JS
+import streamlit.components.v1 as components
 
 # Snowpark imports
 from snowflake.snowpark.session import Session
@@ -85,6 +87,56 @@ def bubble_grid(W: float, T: float) -> str:
 
     html += '</div>'
     return html
+
+# ──────────────────────────────────────────────────────────────
+# 2.  DIAL HTML GENERATOR  ── paste anywhere after imports
+# ──────────────────────────────────────────────────────────────
+def _dial_html(W: float, T: float) -> str:              # ▶ ADD
+    """
+    Build the exact same radial dial used in the React prototype.
+    • Black base ring
+    • Purple wedges fill CCW when exporting (W < 0)
+    • Grey  wedges fill  CW when importing (W ≥ 0)
+    """
+    pct  = 0.0 if T == 0 else min(100.0, abs(W) / abs(T) * 100.0)
+    mode = "export" if W < 0 else "import"
+
+    return f"""
+<div id='dial-root'></div>
+<script>
+{WEDGE_DATA_JS}   /* ← 100 SVG wedges injected verbatim */
+
+const filledPercentage = {pct:.2f};
+const mode             = "{mode}";
+const filledWedges     = Math.floor(filledPercentage);
+const startWedge       = Math.max(1, 101 - filledWedges);   // export fill start
+
+const svgNS = "http://www.w3.org/2000/svg";
+const svg   = document.createElementNS(svgNS,"svg");
+svg.setAttribute("viewBox","0 0 303 296");
+svg.setAttribute("width",303); svg.setAttribute("height",296);
+document.getElementById("dial-root").appendChild(svg);
+
+svg.setAttribute(
+  "style",
+  "transform:rotate(-90deg);transform-origin:50% 50%;"
+);
+
+wedgeData.forEach(w => {{
+  const p = document.createElementNS(svgNS,"path");
+  p.setAttribute("d", w.path);
+
+  const filled = (mode==="export")
+       ? w.id >= startWedge        // CCW fill
+       : w.id <= filledWedges;     //  CW fill
+
+  p.setAttribute("fill",
+       filled ? (mode==="export" ? "#815ED5" : "#ACACAC") : "#1B240F");
+
+  svg.appendChild(p);
+}});
+</script>
+"""
 
 # --------------------------------------------------
 # Data Fetchers (using create_snowpark_session())
@@ -533,7 +585,8 @@ def main():
         c2.metric("Net so far", f"{W:.1f} kWh")
         c3.metric("Points", pts)
 
-        st.markdown(bubble_grid(W, T), unsafe_allow_html=True)
+        # st.markdown(bubble_grid(W, T), unsafe_allow_html=True)
+        components.html(_dial_html(W, T), height=310, width=310, scrolling=False)
 
         st.subheader("Hourly Consumption vs Production")
         chart = df.set_index("ts")[['cons_kwh', 'prod_kwh']]
