@@ -107,9 +107,9 @@ def _dial_html(W: float, T: float, pct: float) -> str:              # ▶ ADD
     )
 
     return f"""
-<div id='dial-container' style='position:relative;width:303px;height:296px;'>
+<div id='dial-container' style='position:relative;width:303px;height:296px;background:#DFF4AE;'>
   <div id='dial-root'></div>
-  <div style='position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:bold;text-align:center;color:#ffffff;'>
+  <div style='position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:bold;text-align:center;color:#000;background:#DFF4AE;'>
     {text}
   </div>
 </div>
