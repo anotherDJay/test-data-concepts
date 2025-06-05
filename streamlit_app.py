@@ -91,19 +91,18 @@ def bubble_grid(W: float, T: float) -> str:
 # ──────────────────────────────────────────────────────────────
 # 2.  DIAL HTML GENERATOR  ── paste anywhere after imports
 # ──────────────────────────────────────────────────────────────
-def _dial_html(W: float, T: float) -> str:              # ▶ ADD
+def _dial_html(W: float, T: float, pct: float) -> str:              # ▶ ADD
     """
     Build the exact same radial dial used in the React prototype.
     • Black base ring
     • Purple wedges fill CCW when exporting (W < 0)
     • Grey  wedges fill  CW when importing (W ≥ 0)
     """
-    pct  = 0.0 if T == 0 else min(100.0, abs(W) / abs(T) * 100.0)
-    mode = "export" if W < 0 else "import"
+    mode = "export" if T < 0 else "import"
 
     text = (
         f"{pct:.0f}% complete to export goal"
-        if mode == "export"
+        if T < 0
         else f"{pct:.0f}% of energy goal consumed"
     )
 
@@ -583,14 +582,19 @@ def main():
 
         W = df["kwh"].iloc[: idx + 1].sum()
         pts = score_week(W, T)
+        pct = (W/T)*100 if T!=0 else 0
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Target", f"{T:.1f} kWh")
         c2.metric("Net so far", f"{W:.1f} kWh")
         c3.metric("Points", pts)
+        if T > 0:
+            st.progress(min(abs(pct)/100,1.0), text=f"{pct:.1f}% of goal consumed")
+        else:
+            st.progress(min(abs(pct)/100,1.0), text=f"{abs(pct):.1f}% of goal exported")
 
         # st.markdown(bubble_grid(W, T), unsafe_allow_html=True)
-        components.html(_dial_html(W, T), height=310, width=310, scrolling=False)
+        components.html(_dial_html(W, T, pct), height=310, width=310, scrolling=False)
 
         st.subheader("Hourly Consumption vs Production")
         chart = df.set_index("ts")[['cons_kwh', 'prod_kwh']]
