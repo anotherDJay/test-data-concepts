@@ -101,8 +101,19 @@ def _dial_html(W: float, T: float) -> str:              # ▶ ADD
     pct  = 0.0 if T == 0 else min(100.0, abs(W) / abs(T) * 100.0)
     mode = "export" if W < 0 else "import"
 
+    text = (
+        f"{pct:.0f}% complete to export goal"
+        if mode == "export"
+        else f"{pct:.0f}% of energy goal consumed"
+    )
+
     return f"""
-<div id='dial-root'></div>
+<div id='dial-container' style='position:relative;width:303px;height:296px;'>
+  <div id='dial-root'></div>
+  <div style='position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:bold;text-align:center;color:#ffffff;'>
+    {text}
+  </div>
+</div>
 <script>
 {WEDGE_DATA_JS}   /* ← 100 SVG wedges injected verbatim */
 
