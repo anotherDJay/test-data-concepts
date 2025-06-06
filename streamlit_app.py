@@ -664,19 +664,15 @@ def compute_so_far_insights(df: pd.DataFrame, idx: int, T_net: float, T_grid: fl
     md.append("| Metric | Value | Comment |")
     md.append("| --- | --- | --- |")
     md.append(f"| Energy budget used | {budget_used:.1f} kWh | {budget_left:.1f} kWh left |")
-    md.append(
-    md.append(
-        f"| Peak consumption hour | {peak_val:.1f} kWh | {peak_ts.strftime('%a %H:%M')} |")
-    md.append(
-        f"| Best self-consumption hour | {best_sc_ratio:.1%} | {best_sc_ts.strftime('%a %H:%M')} |")
+    md.append(f"| Peak consumption hour | {peak_val:.1f} kWh | {peak_ts.strftime('%a %H:%M')} |")
+    md.append(f"| Best self-consumption hour | {best_sc_ratio:.1%} | {best_sc_ts.strftime('%a %H:%M')} |")
     rate_comment = f"{cons_rate:.2f}%/h" if cons_rate else "0%/h"
     if cons_rate > 0:
         rate_comment += f" (~1% every {hours_per_pct:.1f} h)"
     md.append(f"| Consumption rate | {rate_comment} | Percent of goal per hour |")
-        f"| Pace vs goal | {pct_goal:.1f}% used, {pct_time:.1f}% time | {pace_note}, {pace_ratio} ratio |")
+    md.append(f"| Pace vs goal | {pct_goal:.1f}% used, {pct_time:.1f}% time | {pace_note}, {pace_ratio} ratio |")
     md.append(f"| Spikes so far | {len(spikes)} | {spike_str} |")
-    md.append(
-        f"| Self consumption ratio | {sc_ratio:.1%} | Portion of solar used onsite |")
+    md.append(f"| Self consumption ratio | {sc_ratio:.1%} | Portion of solar used onsite |")
     return "\n".join(md)
 
 # --------------------------------------------------
