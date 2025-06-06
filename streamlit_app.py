@@ -119,10 +119,10 @@ def _dial_html(W: float, T: float, pct: float) -> str:
 const filledPercentage = {pct:.2f};
 const mode             = "{mode}";
 
-// Number of grey (import) and purple (export) wedges based on current net pct
-const greyWedges   = Math.max(0, Math.floor(filledPercentage));
-const purpleWedges = Math.max(0, Math.floor(-filledPercentage));
-const purpleStart  = Math.max(1, 101 - purpleWedges);  // export fill start
+// Wedge counts based on absolute progress
+const absPct      = Math.abs(filledPercentage);
+const wedgeCount  = Math.min(100, Math.floor(absPct));
+const startWedge  = Math.max(1, 101 - wedgeCount);  // export fill start
 
 const svgNS = "http://www.w3.org/2000/svg";
 const svg   = document.createElementNS(svgNS,"svg");
@@ -141,10 +141,10 @@ wedgeData.forEach(w => {{
 
   let color = mode === "export" ? "#ACACAC" : "#1B240F"; // base color
 
-  if (purpleWedges > 0 && w.id >= purpleStart) {{
-    color = "#815ED5";
-  }} else if (greyWedges > 0 && w.id <= greyWedges) {{
-    color = "#ACACAC";
+  if (mode === "export") {{
+    if (w.id >= startWedge) color = "#815ED5";
+  }} else {{
+    if (w.id <= wedgeCount) color = "#ACACAC";
   }}
 
   p.setAttribute("fill", color);
@@ -153,15 +153,15 @@ wedgeData.forEach(w => {{
 
 // ----- Inner Ring Logic -----
 const innerTotal = 50;
-let innerGrey = 0;
+let innerPct = 0;
 let showInner = false;
 
 if (mode === "import" && filledPercentage > 100) {{
   showInner = true;
-  innerGrey = Math.min(innerTotal, Math.floor(filledPercentage - 100));
+  innerPct = Math.min(innerTotal, Math.floor(filledPercentage - 100));
 }} else if (mode === "export" && filledPercentage < 0) {{
   showInner = true;
-  innerGrey = Math.min(innerTotal, Math.floor(-filledPercentage));
+  innerPct = Math.min(innerTotal, Math.floor(-filledPercentage));
 }}
 
 if (showInner) {{
@@ -178,7 +178,7 @@ if (showInner) {{
   base.setAttribute("stroke", "#ACACAC");
   base.setAttribute("stroke-width", 20);
 
-  // ----- Outer Ring Logic -----
+  orange.setAttribute("stroke-dashoffset", circ * innerPct / innerTotal);
   const outerTotal = 100;
   let outerPct = 0;
   let showOuter = false;
@@ -204,7 +204,7 @@ if (showInner) {{
     baseOut.setAttribute("stroke-width", 10);
     baseOut.setAttribute("transform", `rotate(-90 ${{centerX}} ${{centerY}}) scale(-1 1) translate(-303 0)`);
     baseOut.setAttribute("stroke-dasharray", outCirc);
-    baseOut.setAttribute("stroke-dashoffset", outCirc);
+    baseOut.setAttribute("stroke-dashoffset", 0);
     svg.appendChild(baseOut);
 
     const purple = document.createElementNS(svgNS, "circle");
