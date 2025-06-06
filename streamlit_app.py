@@ -607,7 +607,7 @@ def main():
     manual_site = st.text_input("Or enter Site ID manually", "")
     site = site_select
     if manual_site:
-        if re.fullmatch(r"\d+", manual_site.strip()):
+        if re.fullmatch(r"[A-Za-z0-9]+", manual_site.strip()):
             site = manual_site.strip()
         else:
             st.error("Site ID must be numeric")
