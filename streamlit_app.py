@@ -628,7 +628,7 @@ def main():
         c1.metric("Target", f"{T_display:.1f} kWh")
         c2.metric("So far", f"{W_display:.1f} kWh")
         c3.metric("Points", pts)
-        if T > 0:
+        if T_display > 0:
             st.progress(min(abs(pct)/100,1.0), text=f"{pct:.1f}% of goal consumed")
         else:
             st.progress(min(abs(pct)/100,1.0), text=f"{abs(pct):.1f}% of goal exported")
