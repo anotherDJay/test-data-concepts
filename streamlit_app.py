@@ -258,6 +258,14 @@ def compute_target(site_id: str, week_start: date, tz_str: str = "UTC") -> float
 
 
 @st.cache_data
+def compute_grid_target(site_id: str, week_start: date, tz_str: str = "UTC") -> float:
+    """Return total grid import from the previous week."""
+    prev_start = week_start - timedelta(days=7)
+    df_prev = load_week_data(site_id, prev_start, tz_str)
+    return df_prev["cons_kwh"].sum() if df_prev is not None else 0.0
+
+
+@st.cache_data
 \
 def get_site_info(site_id: str) -> Optional[Dict[str, Any]]:
     """
@@ -562,39 +570,54 @@ def main():
             return
 
         T = compute_target(site, week_start, tz_str)
+        T_grid = compute_grid_target(site, week_start, tz_str)
         st.session_state.df = df
         st.session_state.T = T
+        st.session_state.T_grid = T_grid
         st.session_state.site_info = site_info
         st.session_state.tz = tz_str
         st.session_state.idx = 0
 
     if "df" in st.session_state:
-        df, T, idx, site_info, tz_str = (
+        df, T_net, idx, site_info, tz_str, T_grid = (
             st.session_state.df,
             st.session_state.T,
             st.session_state.idx,
             st.session_state.site_info,
             st.session_state.tz,
+            st.session_state.T_grid,
         )
 
         idx = st.slider("Hour of Week", min_value=0, max_value=len(df) - 1, value=idx)
         st.session_state.idx = idx
 
-        W = df["kwh"].iloc[: idx + 1].sum()
-        pts = score_week(W, T)
-        pct = (W/T)*100 if T!=0 else 0
+
+        W_net = df["kwh"].iloc[: idx + 1].sum()
+        pts = score_week(W_net, T_net)
+
+        show_grid = st.checkbox("Show Grid Import (vs Last Week)")
+        if show_grid:
+            W_display = df["cons_kwh"].iloc[: idx + 1].sum()
+            T_display = T_grid
+            pct = (W_display/T_display)*100
+        else:
+            W_display = W_net
+            T_display = T_net
+            pct = (W_display/T_display)*100
+
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("Target", f"{T:.1f} kWh")
-        c2.metric("Net so far", f"{W:.1f} kWh")
+        c1.metric("Target", f"{T_display:.1f} kWh")
+        c2.metric("So far", f"{W_display:.1f} kWh")
         c3.metric("Points", pts)
         if T > 0:
             st.progress(min(abs(pct)/100,1.0), text=f"{pct:.1f}% of goal consumed")
         else:
             st.progress(min(abs(pct)/100,1.0), text=f"{abs(pct):.1f}% of goal exported")
 
+
+        components.html(_dial_html(W_display, T_display, pct), height=310, width=310, scrolling=False)
         # st.markdown(bubble_grid(W, T), unsafe_allow_html=True)
-        components.html(_dial_html(W, T, pct), height=310, width=310, scrolling=False)
 
         st.subheader("Hourly Consumption vs Production")
         chart = df.set_index("ts")[['cons_kwh', 'prod_kwh']]
