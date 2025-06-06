@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -26,7 +27,7 @@ def create_snowpark_session() -> Optional[Session]:
         if "snowflake" in st.secrets:
             connection_parameters = st.secrets["snowflake"]
             session = Session.builder.configs(connection_parameters).create()
-            st.success("Snowpark session created successfully!")
+            #st.success("Snowpark session created successfully!")
             return session
         else:
             st.error("Snowflake connection details not found in st.secrets.")
@@ -664,4 +665,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
