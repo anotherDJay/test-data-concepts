@@ -177,7 +177,49 @@ if (showInner) {{
   base.setAttribute("fill", "none");
   base.setAttribute("stroke", "#ACACAC");
   base.setAttribute("stroke-width", 20);
-  base.setAttribute("transform", `translate(0 ${{2*centerX}} ${{centerY}}) scale(-1, 1)`);
+
+  // ----- Outer Ring Logic -----
+  const outerTotal = 100;
+  let outerPct = 0;
+  let showOuter = false;
+
+  if (mode === "export" && filledPercentage > 100) {{
+    showOuter = true;
+    outerPct = Math.min(outerTotal, Math.floor(filledPercentage - 100));
+  }} else if (mode === "import" && filledPercentage < 0) {{
+    showOuter = true;
+    outerPct = Math.min(outerTotal, Math.floor(-filledPercentage));
+  }}
+
+  if (showOuter) {{
+    const outRadius = 140;
+    const outCirc   = 2 * Math.PI * outRadius;
+
+    const baseOut = document.createElementNS(svgNS, "circle");
+    baseOut.setAttribute("cx", centerX);
+    baseOut.setAttribute("cy", centerY);
+    baseOut.setAttribute("r", outRadius);
+    baseOut.setAttribute("fill", "none");
+    baseOut.setAttribute("stroke", "#ACACAC");
+    baseOut.setAttribute("stroke-width", 10);
+    baseOut.setAttribute("transform", `rotate(-90 ${{centerX}} ${{centerY}}) scale(-1 1) translate(-303 0)`);
+    baseOut.setAttribute("stroke-dasharray", outCirc);
+    baseOut.setAttribute("stroke-dashoffset", outCirc);
+    svg.appendChild(baseOut);
+
+    const purple = document.createElementNS(svgNS, "circle");
+    purple.setAttribute("cx", centerX);
+    purple.setAttribute("cy", centerY);
+    purple.setAttribute("r", outRadius);
+    purple.setAttribute("fill", "none");
+    purple.setAttribute("stroke", "#815ED5");
+    purple.setAttribute("stroke-width", 10);
+    purple.setAttribute("transform", `rotate(-90 ${{centerX}} ${{centerY}}) scale(-1 1) translate(-303 0)`);
+    purple.setAttribute("stroke-dasharray", outCirc);
+    purple.setAttribute("stroke-dashoffset", outCirc - outCirc * outerPct / outerTotal);
+    svg.appendChild(purple);
+  }}
+</script>
   base.setAttribute("stroke-dasharray", circ);
   svg.appendChild(base);
 
