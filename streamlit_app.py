@@ -475,7 +475,7 @@ def opportunity_report(df: pd.DataFrame, stats: Dict[str, Any]) -> Dict[str, Any
     note = "No solar data."
     if df["export_kwh"].sum() > 0:
         sc = df["import_kwh"].sum() / df["export_kwh"].sum()
-        note = f"Self-consumption ratio ~{sc:.2f}."
+        note = f"Self-consumption ratio, .<8  room to shift more consumption to during solar hours, >2 consider a battery or a larger solar system  ~{sc:.2f}."
     return {"shift_savings": shift, "battery_kwh": bat, "solar_note": note}
 
 
@@ -647,7 +647,7 @@ def compute_so_far_insights(df: pd.DataFrame, idx: int, T_net: float, T_grid: fl
     md.append("| --- | --- | --- |")
     md.append(f"| Energy budget used | {budget_used:.1f} kWh | {budget_left:.1f} kWh left |")
     md.append(
-        f"| Pace vs goal | {pct_goal:.1f}% used, {pct_time:.1f}% time | {pace_note} |")
+        f"| Pace vs goal | {pct_goal:.1f}% used, {pct_time:.1f}% time | {pace_note}, {pace_ratio} ratio |")
     md.append(f"| Spikes so far | {len(spikes)} | {spike_str} |")
     md.append(
         f"| Self consumption ratio | {sc_ratio:.1%} | Portion of solar used onsite |")
