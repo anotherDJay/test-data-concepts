@@ -9,6 +9,7 @@ from timezonefinder import TimezoneFinder
 from svg_wedges import WEDGE_DATA_JS
 import streamlit.components.v1 as components
 from openai import OpenAI
+from prompts import template_weekly_insights_prompt
 
 client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 import requests
@@ -558,10 +559,7 @@ def summarize_for_owner(markdown: str) -> str:
         return ""
 
 
-    prompt = (
-        "Summarize the following energy usage report in a short paragraph for a home owner. "
-        "Encourage them to check the app for details.\n\n" + markdown
-    )
+    prompt = template_weekly_insights_prompt(markdown)
 
     try:
         resp = client.chat.completions.create(model="gpt-4.1-mini-2025-04-14",
@@ -685,7 +683,7 @@ def main():
                 summary = summarize_for_owner(md)
             if summary:
                 st.info(summary)
-                send_push_notification(summary)
+               # send_push_notification(summary)
 
             df2 = validate_and_clean(df, tz_str)
             st.subheader("Average Daily Consumption Profile (kWh/hour)")
