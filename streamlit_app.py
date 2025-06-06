@@ -177,7 +177,7 @@ if (showInner) {{
   base.setAttribute("fill", "none");
   base.setAttribute("stroke", "#ACACAC");
   base.setAttribute("stroke-width", 20);
-  base.setAttribute("transform", `rotate(-90 ${{centerX}} ${{centerY}})`);
+  base.setAttribute("transform", `translate(0 ${{2*centerX}} ${{centerY}}) scale(-1, 1)`);
   base.setAttribute("stroke-dasharray", circ);
   svg.appendChild(base);
 
@@ -188,7 +188,7 @@ if (showInner) {{
   orange.setAttribute("fill", "none");
   orange.setAttribute("stroke", "#F47B60");
   orange.setAttribute("stroke-width", 20);
-  orange.setAttribute("transform", `rotate(-90 ${{centerX}} ${{centerY}})`);
+  orange.setAttribute("transform", `rotate(0 ${{centerX}} ${{centerY}})`);
   orange.setAttribute("stroke-dasharray", circ);
   orange.setAttribute("stroke-dashoffset", circ * innerGrey / innerTotal);
   svg.appendChild(orange);
