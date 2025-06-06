@@ -475,7 +475,7 @@ def opportunity_report(df: pd.DataFrame, stats: Dict[str, Any]) -> Dict[str, Any
     note = "No solar data."
     if df["export_kwh"].sum() > 0:
         sc = df["import_kwh"].sum() / df["export_kwh"].sum()
-        note = f"Self-consumption ratio ~{sc:.2f}."
+        note = f"Self-consumption ratio, .<8  room to shift more consumption to during solar hours, >2 consider a battery or a larger solar system  ~{sc:.2f}."
     return {"shift_savings": shift, "battery_kwh": bat, "solar_note": note}
 
 
@@ -591,6 +591,90 @@ def send_push_notification(message: str) -> None:
     except Exception as e:
         st.error(f"Failed to send notification: {e}")
 
+
+def compute_so_far_insights(df: pd.DataFrame, idx: int, T_net: float, T_grid: float,
+                            show_grid: bool, tz_str: str = "UTC") -> str:
+    """Return a markdown table with quick insights up to the given hour."""
+    df_part = df.iloc[: idx + 1].copy()
+
+    total_hours = len(df)
+    elapsed_hours = idx + 1
+
+    # Progress numbers based on dial mode
+    W_net = df_part["kwh"].sum()
+    cons_so_far = df_part["cons_kwh"].sum()
+    prod_so_far = df_part["prod_kwh"].sum()
+
+    if show_grid:
+        W_display = cons_so_far
+        T_display = T_grid
+    else:
+        W_display = W_net
+        T_display = T_net
+
+    budget_used = abs(W_display)
+    budget_left = abs(T_display) - abs(W_display)
+    pct_goal = abs(W_display) / abs(T_display) * 100 if T_display else 0
+    pct_time = elapsed_hours / total_hours * 100
+    pace_ratio = pct_goal / pct_time if pct_time else 0
+
+    if pace_ratio > 1.05:
+        pace_note = "Ahead of pace"
+    elif pace_ratio < 0.95:
+        pace_note = "Behind pace"
+    else:
+        pace_note = "On track"
+
+    mean_imp = df_part["cons_kwh"].mean()
+    std_imp = df_part["cons_kwh"].std()
+    thresh = mean_imp + 2 * std_imp
+    spikes = df_part[df_part["cons_kwh"] > thresh]
+    top_spikes = spikes.sort_values("cons_kwh", ascending=False).head(3)
+    spike_str = ", ".join(
+        [
+            f"{r['ts'].tz_convert(tz_str).strftime('%a %H:%M')} ({r['cons_kwh']:.1f} kWh)"
+            for _, r in top_spikes.iterrows()
+        ]
+    )
+    spike_str = spike_str if spike_str else "None"
+
+    # Hour with the highest consumption so far
+    peak_idx = df_part["cons_kwh"].idxmax()
+    peak_ts = df_part.loc[peak_idx, "ts"].tz_convert(tz_str)
+    peak_val = df_part.loc[peak_idx, "cons_kwh"]
+
+    # Hour with the best self consumption (max portion of solar used onsite)
+    df_part["sc_ratio"] = (
+        df_part[["cons_kwh", "prod_kwh"]].min(axis=1) / df_part["cons_kwh"].replace(0, np.nan)
+    )
+    best_sc_idx = df_part["sc_ratio"].idxmax()
+    best_sc_ts = df_part.loc[best_sc_idx, "ts"].tz_convert(tz_str)
+    best_sc_ratio = df_part.loc[best_sc_idx, "sc_ratio"]
+
+    # Self consumption ratio overall
+    self_cons = (df_part[["cons_kwh", "prod_kwh"]].min(axis=1).sum())
+    sc_ratio = self_cons / prod_so_far if prod_so_far > 0 else 0
+
+    # Consumption rate (percentage of goal per hour)
+    cons_rate = pct_goal / elapsed_hours if elapsed_hours else 0
+    hours_per_pct = elapsed_hours / pct_goal if pct_goal else 0
+
+    md = []
+    md.append("### Insights So Far")
+    md.append("| Metric | Value | Comment |")
+    md.append("| --- | --- | --- |")
+    md.append(f"| Energy budget used | {budget_used:.1f} kWh | {budget_left:.1f} kWh left |")
+    md.append(f"| Peak consumption hour | {peak_val:.1f} kWh | {peak_ts.strftime('%a %H:%M')} |")
+    md.append(f"| Best self-consumption hour | {best_sc_ratio:.1%} | {best_sc_ts.strftime('%a %H:%M')} |")
+    rate_comment = f"{cons_rate:.2f}%/h" if cons_rate else "0%/h"
+    if cons_rate > 0:
+        rate_comment += f" (~1% every {hours_per_pct:.1f} h)"
+    md.append(f"| Consumption rate | {rate_comment} | Percent of goal per hour |")
+    md.append(f"| Pace vs goal | {pct_goal:.1f}% used, {pct_time:.1f}% time | {pace_note}, {pace_ratio} ratio |")
+    md.append(f"| Spikes so far | {len(spikes)} | {spike_str} |")
+    md.append(f"| Self consumption ratio | {sc_ratio:.1%} | Portion of solar used onsite |")
+    return "\n".join(md)
+
 # --------------------------------------------------
 # Streamlit App Main
 # --------------------------------------------------
@@ -695,6 +779,10 @@ def main():
             df2 = validate_and_clean(df, tz_str)
             st.subheader("Average Daily Consumption Profile (kWh/hour)")
             st.line_chart(hourly_profile(df2).set_index("hour")["avg_import_kwh"])
+
+        if st.button("Generate Insights So Far"):
+            md_so_far = compute_so_far_insights(df, idx, T_net, T_grid, show_grid, tz_str)
+            st.markdown(md_so_far, unsafe_allow_html=True)
 
         if st.button("Download Raw Interval Data CSV"):
             raw = df[["ts", "cons_kwh", "prod_kwh"]].copy()
