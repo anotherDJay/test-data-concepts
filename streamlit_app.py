@@ -91,26 +91,25 @@ def bubble_grid(W: float, T: float) -> str:
 # ──────────────────────────────────────────────────────────────
 # 2.  DIAL HTML GENERATOR  ── paste anywhere after imports
 # ──────────────────────────────────────────────────────────────
-def _dial_html(W: float, T: float) -> str:              # ▶ ADD
+def _dial_html(W: float, T: float, pct: float) -> str:              # ▶ ADD
     """
     Build the exact same radial dial used in the React prototype.
     • Black base ring
     • Purple wedges fill CCW when exporting (W < 0)
     • Grey  wedges fill  CW when importing (W ≥ 0)
     """
-    pct  = 0.0 if T == 0 else min(100.0, abs(W) / abs(T) * 100.0)
-    mode = "export" if W < 0 else "import"
+    mode = "export" if T < 0 else "import"
 
     text = (
         f"{pct:.0f}% complete to export goal"
-        if mode == "export"
+        if T < 0
         else f"{pct:.0f}% of energy goal consumed"
     )
 
     return f"""
-<div id='dial-container' style='position:relative;width:303px;height:296px;'>
+<div id='dial-container' style='position:relative;width:303px;height:296px;background:#DFF4AE;'>
   <div id='dial-root'></div>
-  <div style='position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:bold;text-align:center;color:#ffffff;'>
+  <div style='position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:bold;text-align:center;color:#000;background:#DFF4AE;'>
     {text}
   </div>
 </div>
@@ -592,6 +591,7 @@ def main():
         idx = st.slider("Hour of Week", min_value=0, max_value=len(df) - 1, value=idx)
         st.session_state.idx = idx
 
+
         W_net = df["kwh"].iloc[: idx + 1].sum()
         pts = score_week(W_net, T_net)
 
@@ -599,16 +599,25 @@ def main():
         if show_grid:
             W_display = df["cons_kwh"].iloc[: idx + 1].sum()
             T_display = T_grid
+            pct = (W_display/T_display)*100
         else:
             W_display = W_net
             T_display = T_net
+            pct = (W_display/T_display)*100
+
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Target", f"{T_display:.1f} kWh")
         c2.metric("So far", f"{W_display:.1f} kWh")
         c3.metric("Points", pts)
+        if T > 0:
+            st.progress(min(abs(pct)/100,1.0), text=f"{pct:.1f}% of goal consumed")
+        else:
+            st.progress(min(abs(pct)/100,1.0), text=f"{abs(pct):.1f}% of goal exported")
 
-        components.html(_dial_html(W_display, T_display), height=310, width=310, scrolling=False)
+
+        components.html(_dial_html(W_display, T_display, pct), height=310, width=310, scrolling=False)
+        # st.markdown(bubble_grid(W, T), unsafe_allow_html=True)
 
         st.subheader("Hourly Consumption vs Production")
         chart = df.set_index("ts")[['cons_kwh', 'prod_kwh']]
