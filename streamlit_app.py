@@ -8,6 +8,10 @@ from zoneinfo import ZoneInfo
 from timezonefinder import TimezoneFinder
 from svg_wedges import WEDGE_DATA_JS
 import streamlit.components.v1 as components
+from openai import OpenAI
+
+client = OpenAI(api_key=st.secrets["openai"]["api_key"])
+import requests
 
 # Snowpark imports
 from snowflake.snowpark.session import Session
@@ -546,6 +550,49 @@ def compute_insights_report(df: pd.DataFrame, site_id: str, site_info: Optional[
     }
     return render_markdown(parts, site_info)
 
+
+def summarize_for_owner(markdown: str) -> str:
+    """Send the markdown report to OpenAI and return a short owner-friendly summary."""
+    if "openai" not in st.secrets or not st.secrets["openai"].get("api_key"):
+        st.error("OpenAI API key not configured in st.secrets")
+        return ""
+
+
+    prompt = (
+        "Summarize the following energy usage report in a short paragraph for a home owner. "
+        "Encourage them to check the app for details.\n\n" + markdown
+    )
+
+    try:
+        resp = client.chat.completions.create(model="gpt-4.1-mini-2025-04-14",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=120)
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        st.error(f"OpenAI request failed: {e}")
+        return ""
+
+
+def send_push_notification(message: str) -> None:
+    """Send a push notification using credentials from st.secrets.push."""
+    if "push" not in st.secrets:
+        st.warning("Push notification service not configured.")
+        return
+
+    info = st.secrets["push"]
+    url = info.get("endpoint")
+    token = info.get("token")
+
+    if not url or not token:
+        st.error("Push service credentials missing.")
+        return
+
+    try:
+        requests.post(url, json={"token": token, "message": message})
+        st.success("Notification sent to homeowner")
+    except Exception as e:
+        st.error(f"Failed to send notification: {e}")
+
 # --------------------------------------------------
 # Streamlit App Main
 # --------------------------------------------------
@@ -633,6 +680,12 @@ def main():
         if st.button("Generate Weekly Insights"):
             md = compute_insights_report(df, site, site_info, tz_str)
             st.markdown(md, unsafe_allow_html=True)
+
+            with st.spinner("Creating summary for homeowner..."):
+                summary = summarize_for_owner(md)
+            if summary:
+                st.info(summary)
+                send_push_notification(summary)
 
             df2 = validate_and_clean(df, tz_str)
             st.subheader("Average Daily Consumption Profile (kWh/hour)")
