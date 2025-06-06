@@ -8,7 +8,9 @@ from zoneinfo import ZoneInfo
 from timezonefinder import TimezoneFinder
 from svg_wedges import WEDGE_DATA_JS
 import streamlit.components.v1 as components
-import openai
+from openai import OpenAI
+
+client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 import requests
 
 # Snowpark imports
@@ -555,7 +557,6 @@ def summarize_for_owner(markdown: str) -> str:
         st.error("OpenAI API key not configured in st.secrets")
         return ""
 
-    openai.api_key = st.secrets["openai"]["api_key"]
 
     prompt = (
         "Summarize the following energy usage report in a short paragraph for a home owner. "
@@ -563,11 +564,9 @@ def summarize_for_owner(markdown: str) -> str:
     )
 
     try:
-        resp = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=120,
-        )
+        resp = client.chat.completions.create(model="gpt-4.1-mini-2025-04-14",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=120)
         return resp.choices[0].message.content.strip()
     except Exception as e:
         st.error(f"OpenAI request failed: {e}")
