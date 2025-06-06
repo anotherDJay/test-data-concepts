@@ -603,7 +603,14 @@ def main():
         st.warning("No sites available. Check your Snowflake connection.")
         return
 
-    site = st.selectbox("Helios Site", sites)
+    site_select = st.selectbox("Helios Site", sites)
+    manual_site = st.text_input("Or enter Site ID manually", "")
+    site = site_select
+    if manual_site:
+        if re.fullmatch(r"\d+", manual_site.strip()):
+            site = manual_site.strip()
+        else:
+            st.error("Site ID must be numeric")
 
     weekday_num = date.today().weekday()
     days_since_sunday = (weekday_num + 1) % 7
