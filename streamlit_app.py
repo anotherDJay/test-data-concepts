@@ -139,7 +139,7 @@ wedgeData.forEach(w => {{
   const p = document.createElementNS(svgNS, "path");
   p.setAttribute("d", w.path);
 
-  let color = "#1B240F"; // default black
+  let color = mode === "export" ? "#ACACAC" : "#1B240F"; // base color
 
   if (purpleWedges > 0 && w.id >= purpleStart) {{
     color = "#815ED5";
@@ -149,8 +149,51 @@ wedgeData.forEach(w => {{
 
   p.setAttribute("fill", color);
   svg.appendChild(p);
-}});
-</script>
+ }});
+
+// ----- Inner Ring Logic -----
+const innerTotal = 50;
+let innerGrey = 0;
+let showInner = false;
+
+if (mode === "import" && filledPercentage > 100) {{
+  showInner = true;
+  innerGrey = Math.min(innerTotal, Math.floor(filledPercentage - 100));
+}} else if (mode === "export" && filledPercentage < 0) {{
+  showInner = true;
+  innerGrey = Math.min(innerTotal, Math.floor(-filledPercentage));
+}}
+
+if (showInner) {{
+  const centerX = 151.5;
+  const centerY = 148;
+  const radius  = 100;
+  const circ    = 2 * Math.PI * radius;
+
+  const base = document.createElementNS(svgNS, "circle");
+  base.setAttribute("cx", centerX);
+  base.setAttribute("cy", centerY);
+  base.setAttribute("r", radius);
+  base.setAttribute("fill", "none");
+  base.setAttribute("stroke", "#ACACAC");
+  base.setAttribute("stroke-width", 20);
+  base.setAttribute("transform", `rotate(-90 ${{centerX}} ${{centerY}})`);
+  base.setAttribute("stroke-dasharray", circ);
+  svg.appendChild(base);
+
+  const orange = document.createElementNS(svgNS, "circle");
+  orange.setAttribute("cx", centerX);
+  orange.setAttribute("cy", centerY);
+  orange.setAttribute("r", radius);
+  orange.setAttribute("fill", "none");
+  orange.setAttribute("stroke", "#F47B60");
+  orange.setAttribute("stroke-width", 20);
+  orange.setAttribute("transform", `rotate(-90 ${{centerX}} ${{centerY}})`);
+  orange.setAttribute("stroke-dasharray", circ);
+  orange.setAttribute("stroke-dashoffset", circ * innerGrey / innerTotal);
+  svg.appendChild(orange);
+}}
+ </script>
 """
 
 # --------------------------------------------------
