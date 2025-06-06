@@ -92,7 +92,7 @@ def bubble_grid(W: float, T: float) -> str:
 # ──────────────────────────────────────────────────────────────
 # 2.  DIAL HTML GENERATOR  ── paste anywhere after imports
 # ──────────────────────────────────────────────────────────────
-def _dial_html(W: float, T: float, pct: float, pct_prev: Optional[float] = None) -> str:
+def _dial_html(W: float, T: float, pct: float) -> str:
     """
     Build the exact same radial dial used in the React prototype.
     • Black base ring
@@ -107,9 +107,6 @@ def _dial_html(W: float, T: float, pct: float, pct_prev: Optional[float] = None)
         else f"{pct:.0f}% of energy goal consumed"
     )
 
-    if pct_prev is None:
-        pct_prev = pct
-
     return f"""
 <div id='dial-container' style='position:relative;width:303px;height:296px;background:#DFF4AE;'>
   <div id='dial-root'></div>
@@ -121,12 +118,12 @@ def _dial_html(W: float, T: float, pct: float, pct_prev: Optional[float] = None)
 {WEDGE_DATA_JS}   /* ← 100 SVG wedges injected verbatim */
 
 const filledPercentage = {pct:.2f};
-const prevPercentage   = {pct_prev:.2f};
 const mode             = "{mode}";
-const filledWedges     = Math.floor(filledPercentage);
-const prevWedges       = Math.floor(prevPercentage);
-const startWedge       = Math.max(1, 101 - filledWedges);   // export fill start
-const prevStart        = Math.max(1, 101 - prevWedges);
+
+// Number of grey (import) and purple (export) wedges based on current net pct
+const greyWedges   = Math.max(0, Math.floor(filledPercentage));
+const purpleWedges = Math.max(0, Math.floor(-filledPercentage));
+const purpleStart  = Math.max(1, 101 - purpleWedges);  // export fill start
 
 const svgNS = "http://www.w3.org/2000/svg";
 const svg   = document.createElementNS(svgNS,"svg");
@@ -140,19 +137,15 @@ svg.setAttribute(
 );
 
 wedgeData.forEach(w => {{
-  const p = document.createElementNS(svgNS,"path");
+  const p = document.createElementNS(svgNS, "path");
   p.setAttribute("d", w.path);
 
   let color = "#1B240F"; // default black
 
-  if (mode === "export") {{
-    if (w.id >= startWedge) color = "#815ED5";
-  }} else {{
-    if (w.id <= filledWedges) {{
-      color = "#ACACAC";
-    }} else if (prevWedges > filledWedges && w.id <= prevWedges) {{
-      color = "#815ED5";
-    }}
+  if (purpleWedges > 0 && w.id >= purpleStart) {{
+    color = "#815ED5";
+  }} else if (greyWedges > 0 && w.id <= greyWedges) {{
+    color = "#ACACAC";
   }}
 
   p.setAttribute("fill", color);
@@ -608,21 +601,15 @@ def main():
         W_net = df["kwh"].iloc[: idx + 1].sum()
         pts = score_week(W_net, T_net)
 
-        prev_idx = max(idx - 1, 0)
-
         show_grid = st.checkbox("Show Grid Import (vs Last Week)")
         if show_grid:
             W_display = df["cons_kwh"].iloc[: idx + 1].sum()
-            W_prev_display = df["cons_kwh"].iloc[: prev_idx + 1].sum()
             T_display = T_grid
             pct = (W_display/T_display)*100
-            pct_prev = (W_prev_display/T_display)*100
         else:
             W_display = W_net
-            W_prev_display = df["kwh"].iloc[: prev_idx + 1].sum()
             T_display = T_net
             pct = (W_display/T_display)*100
-            pct_prev = (W_prev_display/T_display)*100
 
 
         c1, c2, c3 = st.columns(3)
@@ -635,7 +622,7 @@ def main():
             st.progress(min(abs(pct)/100,1.0), text=f"{abs(pct):.1f}% of goal exported")
 
 
-        components.html(_dial_html(W_display, T_display, pct, pct_prev), height=310, width=310, scrolling=False)
+        components.html(_dial_html(W_display, T_display, pct), height=310, width=310, scrolling=False)
         # st.markdown(bubble_grid(W, T), unsafe_allow_html=True)
 
         st.subheader("Hourly Consumption vs Production")
