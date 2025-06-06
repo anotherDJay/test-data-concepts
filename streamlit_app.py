@@ -638,8 +638,26 @@ def compute_so_far_insights(df: pd.DataFrame, idx: int, T_net: float, T_grid: fl
     )
     spike_str = spike_str if spike_str else "None"
 
+    # Hour with the highest consumption so far
+    peak_idx = df_part["cons_kwh"].idxmax()
+    peak_ts = df_part.loc[peak_idx, "ts"].tz_convert(tz_str)
+    peak_val = df_part.loc[peak_idx, "cons_kwh"]
+
+    # Hour with the best self consumption (max portion of solar used onsite)
+    df_part["sc_ratio"] = (
+        df_part[["cons_kwh", "prod_kwh"]].min(axis=1) / df_part["cons_kwh"].replace(0, np.nan)
+    )
+    best_sc_idx = df_part["sc_ratio"].idxmax()
+    best_sc_ts = df_part.loc[best_sc_idx, "ts"].tz_convert(tz_str)
+    best_sc_ratio = df_part.loc[best_sc_idx, "sc_ratio"]
+
+    # Self consumption ratio overall
     self_cons = (df_part[["cons_kwh", "prod_kwh"]].min(axis=1).sum())
     sc_ratio = self_cons / prod_so_far if prod_so_far > 0 else 0
+
+    # Consumption rate (percentage of goal per hour)
+    cons_rate = pct_goal / elapsed_hours if elapsed_hours else 0
+    hours_per_pct = elapsed_hours / pct_goal if pct_goal else 0
 
     md = []
     md.append("### Insights So Far")
@@ -647,6 +665,14 @@ def compute_so_far_insights(df: pd.DataFrame, idx: int, T_net: float, T_grid: fl
     md.append("| --- | --- | --- |")
     md.append(f"| Energy budget used | {budget_used:.1f} kWh | {budget_left:.1f} kWh left |")
     md.append(
+    md.append(
+        f"| Peak consumption hour | {peak_val:.1f} kWh | {peak_ts.strftime('%a %H:%M')} |")
+    md.append(
+        f"| Best self-consumption hour | {best_sc_ratio:.1%} | {best_sc_ts.strftime('%a %H:%M')} |")
+    rate_comment = f"{cons_rate:.2f}%/h" if cons_rate else "0%/h"
+    if cons_rate > 0:
+        rate_comment += f" (~1% every {hours_per_pct:.1f} h)"
+    md.append(f"| Consumption rate | {rate_comment} | Percent of goal per hour |")
         f"| Pace vs goal | {pct_goal:.1f}% used, {pct_time:.1f}% time | {pace_note}, {pace_ratio} ratio |")
     md.append(f"| Spikes so far | {len(spikes)} | {spike_str} |")
     md.append(
