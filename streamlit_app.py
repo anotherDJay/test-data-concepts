@@ -188,46 +188,55 @@ def get_sites() -> list:
 @st.cache_data
 def load_week_data(site_id: str, week_start: date, tz_str: str = "UTC") -> Optional[pd.DataFrame]:
     """
-    Load one week of consumption + production data for a given site.
-    Returns a pandas DataFrame with columns:
-      ['ts', 'cons_kwh', 'prod_kwh', 'kwh']  (all lowercase).
-    If no rows, returns None.
+    Load one week of consumption + production data for a given site,
+    from Monday 00:00 local through Sunday 23:59:59 local.
     """
     session = create_snowpark_session()
     if session is None:
         return None
 
-    start = datetime.combine(week_start, datetime.min.time())
-    end = start + timedelta(days=7)
+    # 1) Build local‐time window
+    local_tz    = ZoneInfo(tz_str)
+    local_start = datetime.combine(week_start, datetime.min.time()).replace(tzinfo=local_tz)
+    local_end   = local_start + timedelta(days=7)
+
+    # 2) Convert to naive UTC for Snowflake filters
+    start_utc = local_start.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+    end_utc   = local_end.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
 
     try:
         cons = (
             session
             .table("ENERGY_SHARED.TRUNKS_HELIOS.HOURLY_CONSUMPTION")
-            .filter((col("HELIOS_SITE_ID") == site_id) & 
-                    (col("CONSUMPTION_ON") >= lit(start)) & 
-                    (col("CONSUMPTION_ON") < lit(end)))
+            .filter(
+                (col("HELIOS_SITE_ID") == site_id)
+                & (col("CONSUMPTION_ON") >= lit(start_utc))
+                & (col("CONSUMPTION_ON") <  lit(end_utc))
+            )
             .select(
                 col("CONSUMPTION_ON").alias("ts"),
-                col("CONSUMPTION_KWH").alias("cons_kwh")
+                col("CONSUMPTION_KWH").alias("cons_kwh"),
             )
         )
-
         prod = (
             session
             .table("ENERGY_SHARED.TRUNKS_HELIOS.HOURLY_PRODUCTION")
-            .filter((col("HELIOS_SITE_ID") == site_id) & 
-                    (col("PRODUCTION_ON") >= lit(start)) & 
-                    (col("PRODUCTION_ON") < lit(end)))
+            .filter(
+                (col("HELIOS_SITE_ID") == site_id)
+                & (col("PRODUCTION_ON")   >= lit(start_utc))
+                & (col("PRODUCTION_ON")   <  lit(end_utc))
+            )
             .select(
                 col("PRODUCTION_ON").alias("ts"),
-                col("PRODUCTION_KWH").alias("prod_kwh")
+                col("PRODUCTION_KWH").alias("prod_kwh"),
             )
         )
 
-        # Full outer join on 'ts'
         joined = cons.join(prod, on="ts", how="full")
-        df = joined.to_pandas()
+        df     = joined.to_pandas()
+
+        # ← normalize column names so df["ts"] works
+        df.columns = [c.lower() for c in df.columns]
     except Exception as e:
         st.error(f"Error loading week data: {e}")
         return None
@@ -235,18 +244,12 @@ def load_week_data(site_id: str, week_start: date, tz_str: str = "UTC") -> Optio
     if df.empty:
         return None
 
-    # Lowercase column names
-    df.columns = [c.lower() for c in df.columns]
-
-    # Convert timestamps from UTC to local timezone and sort
+    # 3) Convert back to local tz, fill and compute net
     df["ts"] = pd.to_datetime(df["ts"], utc=True).dt.tz_convert(tz_str)
+    df[["cons_kwh","prod_kwh"]] = df[["cons_kwh","prod_kwh"]].fillna(0)
+    df["kwh"] = df["cons_kwh"] - df["prod_kwh"]
     df = df.sort_values("ts").reset_index(drop=True)
 
-    # Fill missing consumption/production with 0
-    df[["cons_kwh", "prod_kwh"]] = df[["cons_kwh", "prod_kwh"]].fillna(0)
-
-    # Compute net kWh (import minus export)
-    df["kwh"] = df["cons_kwh"] - df["prod_kwh"]
     return df
 
 
@@ -696,11 +699,16 @@ def main():
         else:
             st.error("Site ID must be numeric")
 
-    weekday_num = date.today().weekday()
-    days_since_sunday = (weekday_num + 1) % 7
-    default_sun = date.today() - timedelta(days=days_since_sunday)
+    # default to this week's Sunday
+    # weekday_num = date.today().weekday()
+    # days_since_sunday = (weekday_num + 1) % 7
+    # default_sun = date.today() - timedelta(days=days_since_sunday)
+    # week_start = st.date_input("Week start (Sunday)", default_sun)
 
-    week_start = st.date_input("Week start (Sunday)", default_sun)
+    # default to this week's Monday
+    weekday_num = date.today().weekday()          # Monday=0 … Sunday=6
+    default_mon = date.today() - timedelta(days=weekday_num)
+    week_start = st.date_input("Week start (Monday)", default_mon)
 
     if st.button("Load Week"):
         site_info = get_site_info(site)
@@ -728,6 +736,14 @@ def main():
             st.session_state.tz,
             st.session_state.T_grid,
         )
+
+        # — show first & last timestamps of the loaded data —
+        first_ts = df["ts"].min()  # or df["ts"].iloc[0]
+        last_ts  = df["ts"].max()  # or df["ts"].iloc[-1]
+        c_start, c_end = st.columns(2)
+        c_start.metric("First timestamp", first_ts.strftime("%Y-%m-%d %H:%M"))
+        c_end.metric("Last timestamp",  last_ts.strftime("%Y-%m-%d %H:%M"))
+        st.markdown("---")
 
         idx = st.slider("Hour of Week", min_value=0, max_value=len(df) - 1, value=idx)
         st.session_state.idx = idx
