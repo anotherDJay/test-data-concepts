@@ -619,9 +619,9 @@ def compute_so_far_insights(df: pd.DataFrame, idx: int, T_net: float, T_grid: fl
     pace_ratio = pct_goal / pct_time if pct_time else 0
 
     if pace_ratio > 1.05:
-        pace_note = "Ahead of pace"
+        pace_note = "Behind of pace"
     elif pace_ratio < 0.95:
-        pace_note = "Behind pace"
+        pace_note = "On track to beat last week"
     else:
         pace_note = "On track"
 
