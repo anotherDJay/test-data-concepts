@@ -29,6 +29,30 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown."""
     global snowflake_client
 
+    print("=" * 80)
+    print("🚀 Energy Insights API Starting Up")
+    print("=" * 80)
+
+    # Check environment variables
+    print("\n📋 Environment Check:")
+    required_vars = ["SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD", "SNOWFLAKE_WAREHOUSE"]
+    missing_vars = []
+
+    for var in required_vars:
+        value = os.getenv(var)
+        if value:
+            # Mask sensitive values
+            if "PASSWORD" in var or "KEY" in var:
+                print(f"  ✅ {var}: ****** (set)")
+            else:
+                print(f"  ✅ {var}: {value}")
+        else:
+            print(f"  ❌ {var}: NOT SET")
+            missing_vars.append(var)
+
+    openai_key = os.getenv("OPENAI_API_KEY")
+    print(f"  {'✅' if openai_key else '❌'} OPENAI_API_KEY: {'****** (set)' if openai_key else 'NOT SET'}")
+
     # Startup: Initialize Snowflake connection
     connection_params = {
         "account": os.getenv("SNOWFLAKE_ACCOUNT"),
@@ -39,14 +63,24 @@ async def lifespan(app: FastAPI):
         "schema": os.getenv("SNOWFLAKE_SCHEMA", "TRUNKS_HELIOS"),
     }
 
+    print("\n🔌 Connecting to Snowflake...")
     try:
+        if missing_vars:
+            raise Exception(f"Missing required environment variables: {', '.join(missing_vars)}")
+
         snowflake_client = SnowflakeClient(connection_params)
-        print("✅ Snowflake connection established")
+        print("✅ Snowflake connection established successfully!")
     except Exception as e:
-        print(f"⚠️  Warning: Failed to connect to Snowflake during startup: {e}")
-        print("⚠️  Service will start but API endpoints will return errors until connection is established")
+        print(f"\n⚠️  WARNING: Failed to connect to Snowflake")
+        print(f"⚠️  Error: {str(e)}")
+        print(f"⚠️  Service will start in degraded mode")
+        print(f"⚠️  API endpoints will return 503 errors until Snowflake connection is established\n")
         # Don't raise - allow the app to start anyway so healthcheck passes
         snowflake_client = None
+
+    print("=" * 80)
+    print("✅ API Server Ready")
+    print("=" * 80)
 
     yield
 
