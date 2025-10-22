@@ -7,6 +7,10 @@ from datetime import date
 from typing import Optional, Dict, Any
 import os
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from service.snowflake_client import SnowflakeClient
 from service.insights import (
