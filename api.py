@@ -43,8 +43,10 @@ async def lifespan(app: FastAPI):
         snowflake_client = SnowflakeClient(connection_params)
         print("✅ Snowflake connection established")
     except Exception as e:
-        print(f"❌ Failed to connect to Snowflake: {e}")
-        raise
+        print(f"⚠️  Warning: Failed to connect to Snowflake during startup: {e}")
+        print("⚠️  Service will start but API endpoints will return errors until connection is established")
+        # Don't raise - allow the app to start anyway so healthcheck passes
+        snowflake_client = None
 
     yield
 
