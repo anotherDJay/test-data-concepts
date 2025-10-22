@@ -279,7 +279,47 @@ def compute_grid_target(site_id: str, week_start: date, tz_str: str = "UTC") -> 
 
 
 @st.cache_data
-\
+def get_user_info(site_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetch user email and full_name for a given site_id by joining
+    PROPERTIES (via HELIOS_USER_IDS) and USERS tables.
+    """
+    session = create_snowpark_session()
+    if session is None:
+        return None
+
+    # Query using HELIOS_USER_IDS from PROPERTIES to directly link to USERS
+    query = f"""
+    SELECT
+      u.EMAIL AS email,
+      u.FULL_NAME AS full_name
+    FROM ENERGY_SHARED.TRUNKS_HELIOS.PROPERTIES p,
+         LATERAL FLATTEN(input => p.HELIOS_SITE_IDS) site_flat,
+         LATERAL FLATTEN(input => p.HELIOS_USER_IDS) user_flat,
+         ENERGY_SHARED.TRUNKS_HELIOS.USERS u
+    WHERE site_flat.value = '{site_id}'
+      AND u.HELIOS_USER_ID = user_flat.value
+    LIMIT 1;
+    """
+
+    try:
+        df = session.sql(query).to_pandas()
+        df.columns = [c.lower() for c in df.columns]
+    except Exception as e:
+        st.error(f"Error fetching user info: {e}")
+        return None
+
+    if df.empty:
+        return None
+
+    row = df.iloc[0]
+    return {
+        "email": row.get("email"),
+        "full_name": row.get("full_name"),
+    }
+
+
+@st.cache_data
 def get_site_info(site_id: str) -> Optional[Dict[str, Any]]:
     """
     Fetch the STREET_ADDRESS, CITY, and ZIP_CODE for a given site_id from
@@ -555,17 +595,21 @@ def compute_insights_report(df: pd.DataFrame, site_id: str, site_info: Optional[
     return render_markdown(parts, site_info)
 
 
-def summarize_for_owner(markdown: str) -> str:
+def summarize_for_owner(markdown: str, user_name: Optional[str] = None) -> str:
     """Send the markdown report to OpenAI and return a short owner-friendly summary."""
     if "openai" not in st.secrets or not st.secrets["openai"].get("api_key"):
         st.error("OpenAI API key not configured in st.secrets")
         return ""
 
+    # Extract first name if full name is provided
+    first_name = None
+    if user_name:
+        first_name = user_name.split()[0] if user_name else None
 
-    prompt = template_weekly_insights_prompt(markdown)
+    prompt = template_weekly_insights_prompt(markdown, first_name)
 
     try:
-        resp = client.chat.completions.create(model="gpt-4.1-mini-2025-04-14",
+        resp = client.chat.completions.create(model="gpt-5-mini",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=120)
         return resp.choices[0].message.content.strip()
@@ -809,6 +853,17 @@ def main():
                 file_name="raw_data.csv",
                 mime="text/csv",
             )
+
+        # Display user information at the bottom
+        st.markdown("---")
+        user_info = get_user_info(site)
+        if user_info:
+            st.subheader("👤 User Information")
+            col1, col2 = st.columns(2)
+            col1.metric("Name", user_info.get("full_name", "N/A"))
+            col2.metric("Email", user_info.get("email", "N/A"))
+        else:
+            st.info("No user information available for this site.")
 
 
 if __name__ == "__main__":

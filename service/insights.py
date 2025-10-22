@@ -239,8 +239,26 @@ def compute_insights_report(df: pd.DataFrame, site_info: Optional[Dict[str, Any]
     return render_markdown(parts, site_info)
 
 
-def summarize_for_owner(markdown: str, openai_api_key: str, user_name: Optional[str] = None) -> str:
-    """Send the markdown report to OpenAI and return a short owner-friendly summary."""
+def summarize_for_owner(
+    markdown: str,
+    openai_api_key: str,
+    user_name: Optional[str] = None,
+    format: str = "json"
+) -> Dict[str, Any] | str:
+    """
+    Send the markdown report to OpenAI and return an owner-friendly summary.
+
+    Args:
+        markdown: The markdown report to summarize
+        openai_api_key: OpenAI API key
+        user_name: Optional user's name (first name will be extracted)
+        format: "json" returns structured dict, "text" returns formatted string
+
+    Returns:
+        If format="json": dict with keys: weekly_insight, headline, quick_wins, push_notification, hacker_hints
+        If format="text": formatted string with all content
+    """
+    import json
     from prompts import template_weekly_insights_prompt
 
     client = OpenAI(api_key=openai_api_key)
@@ -254,10 +272,54 @@ def summarize_for_owner(markdown: str, openai_api_key: str, user_name: Optional[
 
     try:
         resp = client.chat.completions.create(
-            model="gpt-4.1-mini-2025-04-14",
+            model="gpt-5-mini-2025-08-07",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=120
+            max_completion_tokens=5000  # GPT-5 uses max_completion_tokens, increased for JSON format
         )
-        return resp.choices[0].message.content.strip()
+        content = resp.choices[0].message.content
+        if not content:
+            raise ValueError("GPT returned empty response - try increasing max_completion_tokens")
+
+        content = content.strip()
+
+        # Parse JSON response
+        try:
+            summary_json = json.loads(content)
+        except json.JSONDecodeError:
+            # If JSON parsing fails, try to extract JSON from markdown code block
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+                summary_json = json.loads(content)
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+                summary_json = json.loads(content)
+            else:
+                raise ValueError(f"GPT response is not valid JSON. Response was: {content[:500]}")
+
+        # Validate required keys
+        required_keys = ["weekly_insight", "headline", "quick_wins", "push_notification", "hacker_hints"]
+        missing = [k for k in required_keys if k not in summary_json]
+        if missing:
+            raise ValueError(f"GPT response missing required keys: {missing}")
+
+        # Return based on format
+        if format == "text":
+            # Convert JSON to formatted text
+            text_parts = [
+                f"**WEEKLY INSIGHT**\n{summary_json['weekly_insight']}\n",
+                f"**HEADLINE**\n{summary_json['headline']}\n",
+                f"**QUICK WINS**"
+            ]
+            for i, win in enumerate(summary_json['quick_wins'], 1):
+                text_parts.append(f"{i}. {win}")
+            text_parts.append(f"\n**PUSH NOTIFICATION**\n{summary_json['push_notification']}\n")
+            text_parts.append("**HACKER HINTS**")
+            for i, hint in enumerate(summary_json['hacker_hints'], 1):
+                text_parts.append(f"{i}. {hint}")
+            return "\n".join(text_parts)
+        else:
+            # Return JSON structure
+            return summary_json
+
     except Exception as e:
         raise Exception(f"OpenAI request failed: {e}")

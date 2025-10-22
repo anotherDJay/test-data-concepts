@@ -45,7 +45,14 @@ def template_weekly_insights_prompt(markdown, user_name=None):
     - Shuffle wording and section order.
     - Sprinkle local flavor ("Steamy South Carolina evenings").
 
-    Return the result in plain Markdown with no JSON formatting.
+    Return ONLY a valid JSON object with these exact keys:
+    - "weekly_insight": string (2-3 sentences, ≤50 words)
+    - "headline": string (5-10 words, catchy)
+    - "quick_wins": array of exactly 2 strings (≤15 words each)
+    - "push_notification": string (≤15 words, emoji OK)
+    - "hacker_hints": array of 2-3 strings (varied topics)
+
+    Do not include any markdown formatting, code blocks, or additional text outside the JSON object.
 
     """
     return result.strip()
