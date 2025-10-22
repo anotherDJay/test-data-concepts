@@ -13,3 +13,6 @@ snowflake-snowpark-python==1.32.0
 timezonefinder==6.5.9
 pytz==2025.2
 python-dateutil==2.9.0.post0
+
+# Required for Snowflake pandas support
+pyarrow==18.1.0
