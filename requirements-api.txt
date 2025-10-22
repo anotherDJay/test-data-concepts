@@ -1,0 +1,15 @@
+# FastAPI and server dependencies
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+python-dotenv==1.0.1
+
+# Existing dependencies needed by the service
+pandas==2.2.3
+numpy==2.2.6
+openai==1.84.0
+requests==2.32.3
+snowflake-connector-python==3.15.0
+snowflake-snowpark-python==1.32.0
+timezonefinder==6.5.9
+pytz==2025.2
+python-dateutil==2.9.0.post0

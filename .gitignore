@@ -197,4 +197,13 @@ cython_debug/
 
 # personal settings
 #  This file is for personal settings that should not be shared with others.
-*.toml
+# *.toml  # Commented out to allow railway.toml
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Railway
+.railway/
+
+# macOS
+.DS_Store
