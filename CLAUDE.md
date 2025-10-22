@@ -59,11 +59,23 @@ The weekly scoring system ([streamlit_app.py:354](streamlit_app.py#L354)) awards
 
 ### Insights Generation
 
-Uses OpenAI GPT-4 to generate weekly energy insights:
+Uses OpenAI GPT-5 to generate weekly energy insights:
 1. Data analysis functions ([streamlit_app.py:400-483](streamlit_app.py#L400)) compute stats, anomalies, hourly profiles
 2. Markdown report generated with structured sections
 3. OpenAI API called with prompt template from [prompts.py](prompts.py) to create homeowner-friendly summary
 4. Supports "Energy Coach" persona (friendly, practical, competitive tone)
+5. Returns structured JSON or formatted text with sections: weekly_insight, headline, quick_wins, push_notification, hacker_hints
+
+### FastAPI Service
+
+The project includes a hosted FastAPI service ([api.py](api.py)) that provides REST endpoints:
+- `POST /api/insights` - Generate weekly energy insights with AI summary
+  - Supports `ai_summary_format` parameter: "json" (default) or "text"
+  - JSON format returns structured dict with consistent keys
+  - Text format returns formatted markdown string
+- `GET /api/sites/{site_id}/info` - Get site and user information
+- Model: `gpt-5-nano-2025-08-07` with `max_completion_tokens=5000`
+- Deployed on Railway platform
 
 ### Bayou Dashboard (bayou_dashboard.py)
 

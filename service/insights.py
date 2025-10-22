@@ -272,9 +272,9 @@ def summarize_for_owner(
 
     try:
         resp = client.chat.completions.create(
-            model="gpt-5-mini-2025-08-07",
+            model="gpt-5-nano-2025-08-07",
             messages=[{"role": "user", "content": prompt}],
-            max_completion_tokens=5000  # GPT-5 uses max_completion_tokens, increased for JSON format
+            max_completion_tokens=5000  # GPT-5 nano seems to need higher token limit
         )
         content = resp.choices[0].message.content
         if not content:
