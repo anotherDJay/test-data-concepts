@@ -176,10 +176,9 @@ def render_markdown(parts: Dict[str, Any], site_info: Optional[Dict[str, Any]]) 
     md = []
     if site_info:
         md.append("### 0  Site Information")
-        md.append(f"- **Address:** {site_info['address']}")
+        # Only include city and state for privacy (not full address or ZIP)
         md.append(f"- **City:** {site_info['city']}")
         md.append(f"- **State:** {site_info['state']}")
-        md.append(f"- **ZIP:** {site_info['zip']}")
         if "timezone" in site_info and site_info["timezone"]:
             md.append(f"- **Time Zone:** {site_info['timezone']}")
         md.append("")
