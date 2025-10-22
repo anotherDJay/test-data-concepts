@@ -41,17 +41,14 @@ async def lifespan(app: FastAPI):
     for var in required_vars:
         value = os.getenv(var)
         if value:
-            # Mask sensitive values
-            if "PASSWORD" in var or "KEY" in var:
-                print(f"  ✅ {var}: ****** (set)")
-            else:
-                print(f"  ✅ {var}: {value}")
+            # Mask all values for security - only show set/not set status
+            print(f"  ✅ {var}: [set]")
         else:
             print(f"  ❌ {var}: NOT SET")
             missing_vars.append(var)
 
     openai_key = os.getenv("OPENAI_API_KEY")
-    print(f"  {'✅' if openai_key else '❌'} OPENAI_API_KEY: {'****** (set)' if openai_key else 'NOT SET'}")
+    print(f"  {'✅' if openai_key else '❌'} OPENAI_API_KEY: {'[set]' if openai_key else 'NOT SET'}")
 
     # Startup: Initialize Snowflake connection
     connection_params = {
