@@ -17,10 +17,43 @@ class SnowflakeClient:
 
     def __init__(self, connection_params: Dict[str, str]):
         """Initialize Snowflake session with connection parameters."""
-        self.session = Session.builder.configs(connection_params).create()
+        # Store connection params for reconnection
+        self.connection_params = connection_params.copy()
+        # Add keep-alive parameter to maintain session during idle periods
+        self.connection_params['client_session_keep_alive'] = True
+        self.session = None
+        self._create_session()
+
+    def _create_session(self):
+        """Create a new Snowflake session."""
+        try:
+            self.session = Session.builder.configs(self.connection_params).create()
+        except Exception as e:
+            raise Exception(f"Failed to create Snowflake session: {e}")
+
+    def _ensure_session_valid(self):
+        """Validate session and reconnect if expired."""
+        if self.session is None:
+            self._create_session()
+            return
+
+        # Try a simple query to test if session is still valid
+        try:
+            self.session.sql("SELECT 1").collect()
+        except Exception as e:
+            error_str = str(e)
+            # Check for authentication token expiration (error code 390114)
+            if "390114" in error_str or "Authentication token has expired" in error_str:
+                print("⚠️  Snowflake session expired, reconnecting...")
+                self._create_session()
+            else:
+                # Re-raise if it's not an auth error
+                raise
 
     def get_site_info(self, site_id: str) -> Optional[Dict[str, Any]]:
         """Fetch site address, city, state, zip, and timezone for a given site_id."""
+        self._ensure_session_valid()
+
         query = f"""
         SELECT
           p.STREET_ADDRESS AS address,
@@ -69,6 +102,8 @@ class SnowflakeClient:
 
     def get_user_info(self, site_id: str) -> Optional[Dict[str, Any]]:
         """Fetch user email and full_name for a given site_id."""
+        self._ensure_session_valid()
+
         query = f"""
         SELECT
           u.EMAIL AS email,
@@ -102,6 +137,8 @@ class SnowflakeClient:
         Load one week of consumption + production data for a given site,
         from Monday 00:00 local through Sunday 23:59:59 local.
         """
+        self._ensure_session_valid()
+
         # Build local-time window
         local_tz = ZoneInfo(tz_str)
         local_start = datetime.combine(week_start, datetime.min.time()).replace(tzinfo=local_tz)
