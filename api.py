@@ -123,6 +123,7 @@ class InsightsResponse(BaseModel):
     score: int
     detailed_report: str
     ai_summary: Optional[Dict[str, Any] | str] = None
+    token_usage: Optional[Dict[str, Any]] = None
     user_info: Optional[Dict[str, Any]] = None
     site_info: Optional[Dict[str, Any]] = None
     data_points: int
@@ -197,6 +198,7 @@ async def generate_insights(request: InsightsRequest):
 
         # Generate AI summary if requested
         ai_summary = None
+        token_usage = None
         user_info = None
         if request.include_ai_summary:
             openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -210,12 +212,16 @@ async def generate_insights(request: InsightsRequest):
             if request.ai_summary_format not in ["json", "text"]:
                 raise HTTPException(status_code=400, detail="ai_summary_format must be 'json' or 'text'")
 
-            ai_summary = summarize_for_owner(
+            summary_result = summarize_for_owner(
                 detailed_report,
                 openai_api_key,
                 user_name,
                 format=request.ai_summary_format
             )
+
+            # Extract content and token usage from result
+            ai_summary = summary_result["content"]
+            token_usage = summary_result["token_usage"]
 
         return InsightsResponse(
             site_id=request.site_id,
@@ -226,6 +232,7 @@ async def generate_insights(request: InsightsRequest):
             score=score,
             detailed_report=detailed_report,
             ai_summary=ai_summary,
+            token_usage=token_usage,
             user_info=user_info,
             site_info=site_info,
             data_points=len(df_current)

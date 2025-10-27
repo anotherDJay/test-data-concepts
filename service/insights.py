@@ -272,9 +272,9 @@ def summarize_for_owner(
 
     try:
         resp = client.chat.completions.create(
-            model="gpt-5-nano-2025-08-07", #gpt-4.1-nano-2025-04-14
+            model="gpt-4.1-nano-2025-04-14", #gpt-5-nano-2025-08-07"
             messages=[{"role": "user", "content": prompt}],
-            max_completion_tokens=50000  # GPT-5 nano seems to need higher token limit
+            max_completion_tokens=10000  # Safe limit for gpt-4.1-nano and gpt-5-nano
         )
         content = resp.choices[0].message.content
         if not content:
@@ -302,6 +302,13 @@ def summarize_for_owner(
         if missing:
             raise ValueError(f"GPT response missing required keys: {missing}")
 
+        # Extract token usage from response
+        token_usage = {
+            "prompt_tokens": resp.usage.prompt_tokens if resp.usage else None,
+            "completion_tokens": resp.usage.completion_tokens if resp.usage else None,
+            "total_tokens": resp.usage.total_tokens if resp.usage else None,
+        }
+
         # Return based on format
         if format == "text":
             # Convert JSON to formatted text
@@ -316,10 +323,16 @@ def summarize_for_owner(
             text_parts.append("**HACKER HINTS**")
             for i, hint in enumerate(summary_json['hacker_hints'], 1):
                 text_parts.append(f"{i}. {hint}")
-            return "\n".join(text_parts)
+            return {
+                "content": "\n".join(text_parts),
+                "token_usage": token_usage
+            }
         else:
-            # Return JSON structure
-            return summary_json
+            # Return JSON structure with token usage
+            return {
+                "content": summary_json,
+                "token_usage": token_usage
+            }
 
     except Exception as e:
         raise Exception(f"OpenAI request failed: {e}")
