@@ -21,11 +21,12 @@ def template_weekly_insights_prompt(markdown, user_name=None):
 
 
     1. **Craft the WEEKLY INSIGHT**
-       • 2–3 short sentences, ≤ 50 words, direct second-person.
+       • 3-4 short sentences, ≤ 100 words, direct second-person.
        • Choose the data points that would feel most actionable/interesting THIS week
-       * Mention clock times ("around 8 PM"), days ("Tuesday night"), but **not kWh per hour or dollars**.
+       • Mention clock times ("around 8 PM"), days ("Tuesday night"), but **not kWh per hour or dollars**.
        • Pay attention to the self consumption rate, peak time consumptiones, spikes and baseload
-       {"• Address them by their first name to be personal and friendly." if user_name else ""}
+       • Do not use the user's name here.
+
 
     2 . **Write a HEADLINE**
          • 5-10 words, catchy.
@@ -36,7 +37,7 @@ def template_weekly_insights_prompt(markdown, user_name=None):
     3. **Write a PUSH NOTIFICATION**
        • ≤ 15 words, emoji OK, tease the headline insight ("⚡ Tuesday surge—tap for your fix").
 
-    4. **Add 2-3 EXTRA HACKER HINTS**
+    4. **Add 1 EXTRA HACKER HINTS**
        • Vary topics week to week (battery sizing, vampire loads, thermostat nudges, etc.).
 
 
@@ -50,7 +51,7 @@ def template_weekly_insights_prompt(markdown, user_name=None):
     - "headline": string (5-10 words, catchy)
     - "quick_wins": array of exactly 2 strings (≤15 words each)
     - "push_notification": string (≤15 words, emoji OK)
-    - "hacker_hints": array of 2-3 strings (varied topics)
+    - "hacker_hint": 1 additional practical energy tip (≤30 words)
 
     Do not include any markdown formatting, code blocks, or additional text outside the JSON object.
 

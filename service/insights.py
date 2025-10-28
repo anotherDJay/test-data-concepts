@@ -297,7 +297,7 @@ def summarize_for_owner(
                 raise ValueError(f"GPT response is not valid JSON. Response was: {content[:500]}")
 
         # Validate required keys
-        required_keys = ["weekly_insight", "headline", "quick_wins", "push_notification", "hacker_hints"]
+        required_keys = ["weekly_insight", "headline", "quick_wins", "push_notification", "hacker_hint"]
         missing = [k for k in required_keys if k not in summary_json]
         if missing:
             raise ValueError(f"GPT response missing required keys: {missing}")
@@ -320,9 +320,8 @@ def summarize_for_owner(
             for i, win in enumerate(summary_json['quick_wins'], 1):
                 text_parts.append(f"{i}. {win}")
             text_parts.append(f"\n**PUSH NOTIFICATION**\n{summary_json['push_notification']}\n")
-            text_parts.append("**HACKER HINTS**")
-            for i, hint in enumerate(summary_json['hacker_hints'], 1):
-                text_parts.append(f"{i}. {hint}")
+            text_parts.append("**HACKER HINT**")
+            text_parts.append(summary_json['hacker_hint'])
             return {
                 "content": "\n".join(text_parts),
                 "token_usage": token_usage
