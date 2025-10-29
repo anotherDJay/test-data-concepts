@@ -6,8 +6,17 @@ from pydantic import BaseModel, Field
 from datetime import date
 from typing import Optional, Dict, Any
 import os
+import logging
+import time
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -164,20 +173,33 @@ async def generate_insights(request: InsightsRequest):
 
     Returns comprehensive insights including metrics, analysis, and recommendations.
     """
+    start_time = time.time()
+    logger.info(f"[{request.site_id}] Starting insights generation for week {request.week_start}")
+
     if not snowflake_client:
+        logger.error(f"[{request.site_id}] Snowflake connection not available")
         raise HTTPException(status_code=503, detail="Snowflake connection not available")
 
     try:
         # Get site info and determine timezone
+        logger.info(f"[{request.site_id}] Fetching site info...")
         site_info = snowflake_client.get_site_info(request.site_id)
         if not site_info:
+            logger.warning(f"[{request.site_id}] Site not found")
             raise HTTPException(status_code=404, detail=f"Site {request.site_id} not found")
 
         tz_str = request.timezone or site_info.get("timezone", "UTC")
+        logger.info(f"[{request.site_id}] Using timezone: {tz_str}")
 
         # Load current week data
+        logger.info(f"[{request.site_id}] Loading current week data...")
+        data_start = time.time()
         df_current = snowflake_client.load_week_data(request.site_id, request.week_start, tz_str)
+        data_time = time.time() - data_start
+        logger.info(f"[{request.site_id}] Data loaded in {data_time:.2f}s - {len(df_current) if df_current is not None else 0} data points")
+
         if df_current is None or df_current.empty:
+            logger.warning(f"[{request.site_id}] No data found for week {request.week_start}")
             raise HTTPException(
                 status_code=404,
                 detail=f"No data found for site {request.site_id} starting {request.week_start}"
@@ -186,14 +208,18 @@ async def generate_insights(request: InsightsRequest):
         # Load previous week data to compute target
         from datetime import timedelta
         prev_week_start = request.week_start - timedelta(days=7)
+        logger.info(f"[{request.site_id}] Loading previous week data for target calculation...")
         df_prev = snowflake_client.load_week_data(request.site_id, prev_week_start, tz_str)
 
         # Compute metrics
+        logger.info(f"[{request.site_id}] Computing metrics...")
         target_kwh = compute_target(df_prev)
         current_kwh = df_current["kwh"].sum()
         score = score_week(current_kwh, target_kwh)
+        logger.info(f"[{request.site_id}] Score: {score}, Target: {target_kwh:.2f} kWh, Current: {current_kwh:.2f} kWh")
 
         # Generate detailed report
+        logger.info(f"[{request.site_id}] Generating detailed report...")
         detailed_report = compute_insights_report(df_current, site_info, tz_str)
 
         # Generate AI summary if requested
@@ -201,12 +227,17 @@ async def generate_insights(request: InsightsRequest):
         token_usage = None
         user_info = None
         if request.include_ai_summary:
+            logger.info(f"[{request.site_id}] Generating AI summary...")
+            ai_start = time.time()
+
             openai_api_key = os.getenv("OPENAI_API_KEY")
             if not openai_api_key:
+                logger.error(f"[{request.site_id}] OpenAI API key not configured")
                 raise HTTPException(status_code=500, detail="OpenAI API key not configured")
 
             user_info = snowflake_client.get_user_info(request.site_id)
             user_name = user_info.get("full_name") if user_info else None
+            logger.info(f"[{request.site_id}] User: {user_name}")
 
             # Validate format parameter
             if request.ai_summary_format not in ["json", "text"]:
@@ -222,6 +253,11 @@ async def generate_insights(request: InsightsRequest):
             # Extract content and token usage from result
             ai_summary = summary_result["content"]
             token_usage = summary_result["token_usage"]
+            ai_time = time.time() - ai_start
+            logger.info(f"[{request.site_id}] AI summary generated in {ai_time:.2f}s - {token_usage['total_tokens']} tokens")
+
+        total_time = time.time() - start_time
+        logger.info(f"[{request.site_id}] ✅ Insights generated successfully in {total_time:.2f}s")
 
         return InsightsResponse(
             site_id=request.site_id,
@@ -238,9 +274,13 @@ async def generate_insights(request: InsightsRequest):
             data_points=len(df_current)
         )
 
-    except HTTPException:
+    except HTTPException as he:
+        total_time = time.time() - start_time
+        logger.error(f"[{request.site_id}] ❌ HTTP error after {total_time:.2f}s: {he.detail}")
         raise
     except Exception as e:
+        total_time = time.time() - start_time
+        logger.error(f"[{request.site_id}] ❌ Error after {total_time:.2f}s: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error generating insights: {str(e)}")
 
 

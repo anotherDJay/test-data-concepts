@@ -21,7 +21,7 @@ def template_weekly_insights_prompt(markdown, user_name=None):
 
 
     1. **Craft the WEEKLY INSIGHT**
-       • 3-4 short sentences, ≤ 100 words, direct second-person.
+       • 3-4 short sentences, ≤ 75 words, direct second-person.
        • Choose the data points that would feel most actionable/interesting THIS week
        • Mention clock times ("around 8 PM"), days ("Tuesday night"), but **not kWh per hour or dollars**.
        • Pay attention to the self consumption rate, peak time consumptiones, spikes and baseload
@@ -32,7 +32,7 @@ def template_weekly_insights_prompt(markdown, user_name=None):
          • 5-10 words, catchy.
 
     3. **Give TWO QUICK WINS**
-       • Bullets ≤ 15 words each, no dollar amounts unless a rate is provided.
+       • Bullets ≤ 15 words   each, no dollar amounts unless a rate is provided.
 
     3. **Write a PUSH NOTIFICATION**
        • ≤ 15 words, emoji OK, tease the headline insight ("⚡ Tuesday surge—tap for your fix").

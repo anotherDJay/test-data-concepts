@@ -261,7 +261,7 @@ def summarize_for_owner(
     import json
     from prompts import template_weekly_insights_prompt
 
-    client = OpenAI(api_key=openai_api_key)
+    client = OpenAI(api_key=openai_api_key, timeout=45.0)  # 45 second timeout to prevent Railway timeouts
 
     # Extract first name if full name is provided
     first_name = None
@@ -272,9 +272,9 @@ def summarize_for_owner(
 
     try:
         resp = client.chat.completions.create(
-            model="gpt-4.1-nano-2025-04-14", #gpt-5-nano-2025-08-07"
+            model="gpt-4.1-mini-2025-04-14", #gpt-5-nano-2025-08-07"
             messages=[{"role": "user", "content": prompt}],
-            max_completion_tokens=10000  # Safe limit for gpt-4.1-nano and gpt-5-nano
+            max_completion_tokens=5000  # Reduced for faster responses and lower Railway timeout risk
         )
         content = resp.choices[0].message.content
         if not content:
