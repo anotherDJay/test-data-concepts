@@ -32,7 +32,7 @@ def template_weekly_insights_prompt(markdown, user_name=None):
          • 5-10 words, catchy.
 
     3. **Give TWO QUICK WINS**
-       • Bullets ≤ 15 words   each, no dollar amounts unless a rate is provided.
+       • Bullets ≤ 15 words each, no dollar amounts unless a rate is provided.
 
     3. **Write a PUSH NOTIFICATION**
        • ≤ 15 words, emoji OK, tease the headline insight ("⚡ Tuesday surge—tap for your fix").
