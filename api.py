@@ -3,7 +3,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional, Dict, Any
 import os
 import logging
@@ -181,29 +181,22 @@ async def generate_insights(request: InsightsRequest):
         raise HTTPException(status_code=503, detail="Snowflake connection not available")
 
     try:
-        # Fetch site info and determine timezone
+        # Get site info and determine timezone
         logger.info(f"[{request.site_id}] Fetching site info...")
         site_info = snowflake_client.get_site_info(request.site_id)
         if not site_info:
             logger.warning(f"[{request.site_id}] Site not found")
             raise HTTPException(status_code=404, detail=f"Site {request.site_id} not found")
 
-        # Use detected timezone if not provided
         tz_str = request.timezone or site_info.get("timezone", "UTC")
         logger.info(f"[{request.site_id}] Using timezone: {tz_str}")
 
-        # Fetch user info
-        logger.info(f"[{request.site_id}] Fetching user info...")
-        user_info = snowflake_client.get_user_info(request.site_id)
-
-        # Load current and previous week data (optimized: single query for both weeks)
-        logger.info(f"[{request.site_id}] Loading week data (OPTIMIZED)...")
+        # Load current week data
+        logger.info(f"[{request.site_id}] Loading current week data...")
         data_start = time.time()
-
-        df_current, df_prev = snowflake_client.load_two_weeks_data(request.site_id, request.week_start, tz_str)
-
+        df_current = snowflake_client.load_week_data(request.site_id, request.week_start, tz_str)
         data_time = time.time() - data_start
-        logger.info(f"[{request.site_id}] Data loaded in {data_time:.2f}s - {len(df_current) if df_current is not None else 0} data points (OPTIMIZED)")
+        logger.info(f"[{request.site_id}] Data loaded in {data_time:.2f}s - {len(df_current) if df_current is not None else 0} data points")
 
         if df_current is None or df_current.empty:
             logger.warning(f"[{request.site_id}] No data found for week {request.week_start}")
@@ -211,6 +204,12 @@ async def generate_insights(request: InsightsRequest):
                 status_code=404,
                 detail=f"No data found for site {request.site_id} starting {request.week_start}"
             )
+
+        # Load previous week data to compute target
+        from datetime import timedelta
+        prev_week_start = request.week_start - timedelta(days=7)
+        logger.info(f"[{request.site_id}] Loading previous week data for target calculation...")
+        df_prev = snowflake_client.load_week_data(request.site_id, prev_week_start, tz_str)
 
         # Compute metrics
         logger.info(f"[{request.site_id}] Computing metrics...")
@@ -226,6 +225,7 @@ async def generate_insights(request: InsightsRequest):
         # Generate AI summary if requested
         ai_summary = None
         token_usage = None
+        user_info = None
         if request.include_ai_summary:
             logger.info(f"[{request.site_id}] Generating AI summary...")
             ai_start = time.time()
@@ -235,6 +235,7 @@ async def generate_insights(request: InsightsRequest):
                 logger.error(f"[{request.site_id}] OpenAI API key not configured")
                 raise HTTPException(status_code=500, detail="OpenAI API key not configured")
 
+            user_info = snowflake_client.get_user_info(request.site_id)
             user_name = user_info.get("full_name") if user_info else None
             logger.info(f"[{request.site_id}] User: {user_name}")
 
