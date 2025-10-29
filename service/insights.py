@@ -154,11 +154,21 @@ def anomaly_scan(df: pd.DataFrame, z_thresh: float = 3.0) -> pd.DataFrame:
 
 def opportunity_report(df: pd.DataFrame, stats: Dict[str, Any]) -> Dict[str, Any]:
     """Generate opportunity analysis."""
-    m17 = df[df["hour"].between(17, 20)]["import_kwh"].mean()
-    m10 = df[df["hour"].between(10, 15)]["import_kwh"].mean()
-    shift = max(0, m17 - m10)
-    p95 = np.percentile(df[df["hour"].between(17, 20)]["import_kwh"], 95)
-    bat = max(0, p95 - stats["base_load"])
+    # Filter data for peak and solar hours
+    hour_17_20 = df[df["hour"].between(17, 20)]["import_kwh"]
+    hour_10_15 = df[df["hour"].between(10, 15)]["import_kwh"]
+
+    # Handle edge case: insufficient data for opportunity analysis
+    if len(hour_17_20) == 0 or len(hour_10_15) == 0:
+        shift = 0.0
+        bat = 0.0
+    else:
+        m17 = hour_17_20.mean()
+        m10 = hour_10_15.mean()
+        shift = max(0, m17 - m10)
+        p95 = np.percentile(hour_17_20, 95)
+        bat = max(0, p95 - stats["base_load"])
+
     note = "No solar data."
     if df["export_kwh"].sum() > 0:
         sc = df["import_kwh"].sum() / df["export_kwh"].sum()
