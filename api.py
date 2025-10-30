@@ -9,7 +9,6 @@ import os
 import logging
 import time
 from contextlib import asynccontextmanager
-from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 
 # Configure logging
@@ -193,21 +192,18 @@ async def generate_insights(request: InsightsRequest):
         tz_str = request.timezone or site_info.get("timezone", "UTC")
         logger.info(f"[{request.site_id}] Using timezone: {tz_str}")
 
-        # Run user_info and week_data queries in PARALLEL
-        logger.info(f"[{request.site_id}] Fetching user info + week data (PARALLEL)...")
-        parallel_start = time.time()
+        # Fetch user info
+        logger.info(f"[{request.site_id}] Fetching user info...")
+        user_info = snowflake_client.get_user_info(request.site_id)
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            # Submit both queries to run in parallel
-            future_user = executor.submit(snowflake_client.get_user_info, request.site_id)
-            future_weeks = executor.submit(snowflake_client.load_two_weeks_data, request.site_id, request.week_start, tz_str)
+        # Load current and previous week data (optimized: single query for both weeks)
+        logger.info(f"[{request.site_id}] Loading week data (OPTIMIZED)...")
+        data_start = time.time()
 
-            # Get results
-            user_info = future_user.result()
-            df_current, df_prev = future_weeks.result()
+        df_current, df_prev = snowflake_client.load_two_weeks_data(request.site_id, request.week_start, tz_str)
 
-        parallel_time = time.time() - parallel_start
-        logger.info(f"[{request.site_id}] Parallel queries completed in {parallel_time:.2f}s - {len(df_current) if df_current is not None else 0} data points")
+        data_time = time.time() - data_start
+        logger.info(f"[{request.site_id}] Data loaded in {data_time:.2f}s - {len(df_current) if df_current is not None else 0} data points (OPTIMIZED)")
 
         if df_current is None or df_current.empty:
             logger.warning(f"[{request.site_id}] No data found for week {request.week_start}")
