@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 import os
 import logging
 import time
+import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
@@ -29,8 +30,10 @@ from service.insights import (
     summarize_for_owner
 )
 
-# Global client instance
+# Global client instance and concurrency limiter
 snowflake_client: Optional[SnowflakeClient] = None
+# Limit to 3 concurrent Snowflake requests to prevent overload
+request_semaphore = asyncio.Semaphore(3)
 
 
 @asynccontextmanager
@@ -174,113 +177,115 @@ async def generate_insights(request: InsightsRequest):
     Returns comprehensive insights including metrics, analysis, and recommendations.
     """
     start_time = time.time()
-    logger.info(f"[{request.site_id}] Starting insights generation for week {request.week_start}")
 
-    if not snowflake_client:
-        logger.error(f"[{request.site_id}] Snowflake connection not available")
-        raise HTTPException(status_code=503, detail="Snowflake connection not available")
+    # Acquire semaphore to limit concurrent Snowflake requests
+    async with request_semaphore:
+        logger.info(f"[{request.site_id}] Starting insights generation for week {request.week_start}")
 
-    try:
-        # Get site info first to determine timezone (needed for week_data query)
-        logger.info(f"[{request.site_id}] Fetching site info...")
-        site_info = snowflake_client.get_site_info(request.site_id)
-        if not site_info:
-            logger.warning(f"[{request.site_id}] Site not found")
-            raise HTTPException(status_code=404, detail=f"Site {request.site_id} not found")
+        if not snowflake_client:
+            logger.error(f"[{request.site_id}] Snowflake connection not available")
+            raise HTTPException(status_code=503, detail="Snowflake connection not available")
 
-        # Use detected timezone if not provided
-        tz_str = request.timezone or site_info.get("timezone", "UTC")
-        logger.info(f"[{request.site_id}] Using timezone: {tz_str}")
+        try:
+            # Get site info first to determine timezone (needed for week_data query)
+            logger.info(f"[{request.site_id}] Fetching site info...")
+            site_info = snowflake_client.get_site_info(request.site_id)
+            if not site_info:
+                logger.warning(f"[{request.site_id}] Site not found")
+                raise HTTPException(status_code=404, detail=f"Site {request.site_id} not found")
 
-        # Fetch user info
-        logger.info(f"[{request.site_id}] Fetching user info...")
-        user_info = snowflake_client.get_user_info(request.site_id)
+            # Use detected timezone if not provided
+            tz_str = request.timezone or site_info.get("timezone", "UTC")
+            logger.info(f"[{request.site_id}] Using timezone: {tz_str}")
 
-        # Load current and previous week data (optimized: single query for both weeks)
-        logger.info(f"[{request.site_id}] Loading week data (OPTIMIZED)...")
-        data_start = time.time()
+            # Fetch user info
+            logger.info(f"[{request.site_id}] Fetching user info...")
+            user_info = snowflake_client.get_user_info(request.site_id)
 
-        df_current, df_prev = snowflake_client.load_two_weeks_data(request.site_id, request.week_start, tz_str)
+            # Load current and previous week data (optimized: single query for both weeks)
+            logger.info(f"[{request.site_id}] Loading week data (OPTIMIZED)...")
+            data_start = time.time()
 
-        data_time = time.time() - data_start
-        logger.info(f"[{request.site_id}] Data loaded in {data_time:.2f}s - {len(df_current) if df_current is not None else 0} data points (OPTIMIZED)")
+            df_current, df_prev = snowflake_client.load_two_weeks_data(request.site_id, request.week_start, tz_str)
 
-        if df_current is None or df_current.empty:
-            logger.warning(f"[{request.site_id}] No data found for week {request.week_start}")
-            raise HTTPException(
-                status_code=404,
-                detail=f"No data found for site {request.site_id} starting {request.week_start}"
+            data_time = time.time() - data_start
+            logger.info(f"[{request.site_id}] Data loaded in {data_time:.2f}s - {len(df_current) if df_current is not None else 0} data points (OPTIMIZED)")
+
+            if df_current is None or df_current.empty:
+                logger.warning(f"[{request.site_id}] No data found for week {request.week_start}")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No data found for site {request.site_id} starting {request.week_start}"
+                )
+
+            # Compute metrics
+            logger.info(f"[{request.site_id}] Computing metrics...")
+            target_kwh = compute_target(df_prev)
+            current_kwh = df_current["kwh"].sum()
+            score = score_week(current_kwh, target_kwh)
+            logger.info(f"[{request.site_id}] Score: {score}, Target: {target_kwh:.2f} kWh, Current: {current_kwh:.2f} kWh")
+
+            # Generate detailed report
+            logger.info(f"[{request.site_id}] Generating detailed report...")
+            detailed_report = compute_insights_report(df_current, site_info, tz_str)
+
+            # Generate AI summary if requested
+            ai_summary = None
+            token_usage = None
+            if request.include_ai_summary:
+                logger.info(f"[{request.site_id}] Generating AI summary...")
+                ai_start = time.time()
+
+                openai_api_key = os.getenv("OPENAI_API_KEY")
+                if not openai_api_key:
+                    logger.error(f"[{request.site_id}] OpenAI API key not configured")
+                    raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+
+                user_name = user_info.get("full_name") if user_info else None
+                logger.info(f"[{request.site_id}] User: {user_name}")
+
+                # Validate format parameter
+                if request.ai_summary_format not in ["json", "text"]:
+                    raise HTTPException(status_code=400, detail="ai_summary_format must be 'json' or 'text'")
+
+                summary_result = summarize_for_owner(
+                    detailed_report,
+                    openai_api_key,
+                    user_name,
+                    format=request.ai_summary_format
+                )
+
+                # Extract content and token usage from result
+                ai_summary = summary_result["content"]
+                token_usage = summary_result["token_usage"]
+                ai_time = time.time() - ai_start
+                logger.info(f"[{request.site_id}] AI summary generated in {ai_time:.2f}s - {token_usage['total_tokens']} tokens")
+
+            total_time = time.time() - start_time
+            logger.info(f"[{request.site_id}] ✅ Insights generated successfully in {total_time:.2f}s")
+
+            return InsightsResponse(
+                site_id=request.site_id,
+                week_start=request.week_start.isoformat(),
+                timezone=tz_str,
+                target_kwh=round(target_kwh, 2),
+                current_kwh=round(current_kwh, 2),
+                score=score,
+                detailed_report=detailed_report,
+                ai_summary=ai_summary,
+                token_usage=token_usage,
+                user_info=user_info,
+                site_info=site_info,
+                data_points=len(df_current)
             )
 
-        # Compute metrics
-        logger.info(f"[{request.site_id}] Computing metrics...")
-        target_kwh = compute_target(df_prev)
-        current_kwh = df_current["kwh"].sum()
-        score = score_week(current_kwh, target_kwh)
-        logger.info(f"[{request.site_id}] Score: {score}, Target: {target_kwh:.2f} kWh, Current: {current_kwh:.2f} kWh")
-
-        # Generate detailed report
-        logger.info(f"[{request.site_id}] Generating detailed report...")
-        detailed_report = compute_insights_report(df_current, site_info, tz_str)
-
-        # Generate AI summary if requested
-        ai_summary = None
-        token_usage = None
-        user_info = None
-        if request.include_ai_summary:
-            logger.info(f"[{request.site_id}] Generating AI summary...")
-            ai_start = time.time()
-
-            openai_api_key = os.getenv("OPENAI_API_KEY")
-            if not openai_api_key:
-                logger.error(f"[{request.site_id}] OpenAI API key not configured")
-                raise HTTPException(status_code=500, detail="OpenAI API key not configured")
-
-            user_name = user_info.get("full_name") if user_info else None
-            logger.info(f"[{request.site_id}] User: {user_name}")
-
-            # Validate format parameter
-            if request.ai_summary_format not in ["json", "text"]:
-                raise HTTPException(status_code=400, detail="ai_summary_format must be 'json' or 'text'")
-
-            summary_result = summarize_for_owner(
-                detailed_report,
-                openai_api_key,
-                user_name,
-                format=request.ai_summary_format
-            )
-
-            # Extract content and token usage from result
-            ai_summary = summary_result["content"]
-            token_usage = summary_result["token_usage"]
-            ai_time = time.time() - ai_start
-            logger.info(f"[{request.site_id}] AI summary generated in {ai_time:.2f}s - {token_usage['total_tokens']} tokens")
-
-        total_time = time.time() - start_time
-        logger.info(f"[{request.site_id}] ✅ Insights generated successfully in {total_time:.2f}s")
-
-        return InsightsResponse(
-            site_id=request.site_id,
-            week_start=request.week_start.isoformat(),
-            timezone=tz_str,
-            target_kwh=round(target_kwh, 2),
-            current_kwh=round(current_kwh, 2),
-            score=score,
-            detailed_report=detailed_report,
-            ai_summary=ai_summary,
-            token_usage=token_usage,
-            user_info=user_info,
-            site_info=site_info,
-            data_points=len(df_current)
-        )
-
-    except HTTPException as he:
-        total_time = time.time() - start_time
-        logger.error(f"[{request.site_id}] ❌ HTTP error after {total_time:.2f}s: {he.detail}")
-        raise
-    except Exception as e:
-        total_time = time.time() - start_time
-        logger.error(f"[{request.site_id}] ❌ Error after {total_time:.2f}s: {str(e)}", exc_info=True)
+        except HTTPException as he:
+            total_time = time.time() - start_time
+            logger.error(f"[{request.site_id}] ❌ HTTP error after {total_time:.2f}s: {he.detail}")
+            raise
+        except Exception as e:
+            total_time = time.time() - start_time
+            logger.error(f"[{request.site_id}] ❌ Error after {total_time:.2f}s: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error generating insights: {str(e)}")
 
 

@@ -88,7 +88,13 @@ def validate_and_clean(df: pd.DataFrame, tz_str: str = "UTC") -> pd.DataFrame:
     df2["day"] = df2["timestamp"].dt.date
     df2["hour"] = df2["timestamp"].dt.hour
 
-    iv = df2["timestamp"].diff().dropna().dt.total_seconds().mode().iloc[0] / 3600
+    # Handle edge case: insufficient data for mode calculation
+    time_diffs = df2["timestamp"].diff().dropna()
+    if len(time_diffs) > 0:
+        mode_result = time_diffs.dt.total_seconds().mode()
+        iv = mode_result.iloc[0] / 3600 if not mode_result.empty else 1.0
+    else:
+        iv = 1.0
     df2.attrs["interval_hours"] = iv
     return df2
 
