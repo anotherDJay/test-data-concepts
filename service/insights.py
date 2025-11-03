@@ -259,7 +259,8 @@ def summarize_for_owner(
     markdown: str,
     openai_api_key: str,
     user_name: Optional[str] = None,
-    format: str = "json"
+    format: str = "json",
+    score: Optional[int] = None
 ) -> Dict[str, Any] | str:
     """
     Send the markdown report to OpenAI and return an owner-friendly summary.
@@ -269,6 +270,7 @@ def summarize_for_owner(
         openai_api_key: OpenAI API key
         user_name: Optional user's name (first name will be extracted)
         format: "json" returns structured dict, "text" returns formatted string
+        score: Optional weekly score (0-300) for context
 
     Returns:
         If format="json": dict with keys: weekly_insight, headline, quick_wins, push_notification, hacker_hints
@@ -284,7 +286,7 @@ def summarize_for_owner(
     if user_name:
         first_name = user_name.split()[0] if user_name else None
 
-    prompt = template_weekly_insights_prompt(markdown, first_name)
+    prompt = template_weekly_insights_prompt(markdown, first_name, score)
 
     try:
         resp = client.chat.completions.create(

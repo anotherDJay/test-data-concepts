@@ -252,7 +252,8 @@ async def generate_insights(request: InsightsRequest):
                     detailed_report,
                     openai_api_key,
                     user_name,
-                    format=request.ai_summary_format
+                    format=request.ai_summary_format,
+                    score=score
                 )
 
                 # Extract content and token usage from result
