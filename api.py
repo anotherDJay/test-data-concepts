@@ -225,9 +225,9 @@ async def generate_insights(request: InsightsRequest):
             score = score_week(current_kwh, target_kwh)
             logger.info(f"[{request.site_id}] Score: {score}, Target: {target_kwh:.2f} kWh, Current: {current_kwh:.2f} kWh")
 
-            # Generate detailed report
+            # Generate detailed report (markdown for human-readable response)
             logger.info(f"[{request.site_id}] Generating detailed report...")
-            detailed_report = compute_insights_report(df_current, site_info, tz_str)
+            detailed_report = compute_insights_report(df_current, site_info, tz_str, format="markdown")
 
             # Generate AI summary if requested
             ai_summary = None
@@ -248,8 +248,11 @@ async def generate_insights(request: InsightsRequest):
                 if request.ai_summary_format not in ["json", "text"]:
                     raise HTTPException(status_code=400, detail="ai_summary_format must be 'json' or 'text'")
 
+                # Generate compact JSON report for AI (token-efficient)
+                json_report = compute_insights_report(df_current, site_info, tz_str, format="json")
+
                 summary_result = summarize_for_owner(
-                    detailed_report,
+                    json_report,
                     openai_api_key,
                     user_name,
                     format=request.ai_summary_format,

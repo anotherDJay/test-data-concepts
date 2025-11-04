@@ -1,4 +1,4 @@
-def template_weekly_insights_prompt(markdown, user_name=None, score=None):
+def template_weekly_insights_prompt(data, user_name=None, score=None):
     user_context = f"The homeowner's name is {user_name}. " if user_name else ""
     score_context = f"This week's score: {score}/300. " if score is not None else ""
 
@@ -16,9 +16,8 @@ def template_weekly_insights_prompt(markdown, user_name=None, score=None):
     {user_context}Use their first name occasionally to make it personal and friendly.
     {score_context}
 
-    ---
-
-    {markdown}
+    **ENERGY DATA** (JSON format for efficiency):
+    {data}
 
     
 

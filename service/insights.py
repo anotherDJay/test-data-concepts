@@ -182,6 +182,58 @@ def opportunity_report(df: pd.DataFrame, stats: Dict[str, Any]) -> Dict[str, Any
     return {"shift_savings": shift, "battery_kwh": bat, "solar_note": note}
 
 
+def render_json(parts: Dict[str, Any], site_info: Optional[Dict[str, Any]]) -> str:
+    """Render insights as compact JSON report (optimized for AI token efficiency)."""
+    import json
+
+    s = parts["stats"]
+    common = parts["common"]
+    anom = parts["anomalies"]
+    opp = parts["opportunity"]
+
+    # Convert anomalies DataFrame to compact list
+    anomalies_list = []
+    for _, r in anom.iterrows():
+        anomalies_list.append({
+            "day": r["timestamp"].strftime("%a"),
+            "hour": r["timestamp"].hour,
+            "kwh": round(r["import_kwh"], 2)
+        })
+
+    # Build compact JSON structure
+    data = {
+        "site": {
+            "city": site_info.get("city") if site_info else None,
+            "state": site_info.get("state") if site_info else None,
+            "timezone": site_info.get("timezone") if site_info else None
+        },
+        "weekly_totals": {
+            "consumption_kwh": round(s["total_consumption"], 1),
+            "grid_kwh": round(s["total_grid"], 1),
+            "daily_avg_kwh": round(s["daily_avg"], 1)
+        },
+        "peaks": {
+            "day": s["peak_day_name"],
+            "hour": s["peak_hour_ts"].hour,
+            "kwh": round(s["peak_hour_kwh"], 2)
+        },
+        "baseload_kwh_per_hour": round(s["base_load"], 2),
+        "peak_window": {
+            "start_hour": common["start_hour"],
+            "end_hour": (common["start_hour"] + 2) % 24,
+            "avg_kwh": round(common["avg_kwh"], 1)
+        },
+        "anomalies": anomalies_list,
+        "opportunities": {
+            "shift_savings_kwh_per_day": round(opp["shift_savings"], 1),
+            "battery_kwh": round(opp["battery_kwh"], 1),
+            "solar_note": opp["solar_note"]
+        }
+    }
+
+    return json.dumps(data, separators=(',', ':'))
+
+
 def render_markdown(parts: Dict[str, Any], site_info: Optional[Dict[str, Any]]) -> str:
     """Render insights as markdown report."""
     s = parts["stats"]
@@ -237,8 +289,15 @@ def render_markdown(parts: Dict[str, Any], site_info: Optional[Dict[str, Any]]) 
     return "\n".join(md)
 
 
-def compute_insights_report(df: pd.DataFrame, site_info: Optional[Dict[str, Any]], tz_str: str = "UTC") -> str:
-    """Generate complete insights report."""
+def compute_insights_report(df: pd.DataFrame, site_info: Optional[Dict[str, Any]], tz_str: str = "UTC", format: str = "json") -> str:
+    """Generate complete insights report.
+
+    Args:
+        df: Energy data DataFrame
+        site_info: Site metadata
+        tz_str: Timezone string
+        format: "json" (default, compact for AI) or "markdown" (verbose for debugging)
+    """
     df2 = validate_and_clean(df, tz_str)
     stats = high_level_stats(df2)
     common = weekday_heaviest_3h(df2)
@@ -252,7 +311,11 @@ def compute_insights_report(df: pd.DataFrame, site_info: Optional[Dict[str, Any]
         "anomalies": anom,
         "opportunity": opp
     }
-    return render_markdown(parts, site_info)
+
+    if format == "json":
+        return render_json(parts, site_info)
+    else:
+        return render_markdown(parts, site_info)
 
 
 def summarize_for_owner(
