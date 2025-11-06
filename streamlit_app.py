@@ -124,10 +124,10 @@ def _dial_html(W: float, T: float, pct: float) -> str:
 const filledPercentage = {pct:.2f};
 const mode             = "{mode}";
 
-// Number of grey (import) and purple (export) wedges based on current net pct
-const greyWedges   = Math.max(0, Math.floor(filledPercentage));
-const purpleWedges = Math.max(0, Math.floor(-filledPercentage));
-const purpleStart  = Math.max(1, 101 - purpleWedges);  // export fill start
+// Wedge counts based on absolute progress
+const absPct      = Math.abs(filledPercentage);
+const wedgeCount  = Math.min(100, Math.floor(absPct));
+const startWedge  = Math.max(1, 101 - wedgeCount);  // export fill start
 
 const svgNS = "http://www.w3.org/2000/svg";
 const svg   = document.createElementNS(svgNS,"svg");
@@ -144,18 +144,103 @@ wedgeData.forEach(w => {{
   const p = document.createElementNS(svgNS, "path");
   p.setAttribute("d", w.path);
 
-  let color = "#1B240F"; // default black
+  let color = mode === "export" ? "#ACACAC" : "#1B240F"; // base color
 
-  if (purpleWedges > 0 && w.id >= purpleStart) {{
-    color = "#815ED5";
-  }} else if (greyWedges > 0 && w.id <= greyWedges) {{
-    color = "#ACACAC";
+  if (mode === "export") {{
+    if (w.id >= startWedge) color = "#815ED5";
+  }} else {{
+    if (w.id <= wedgeCount) color = "#ACACAC";
   }}
 
   p.setAttribute("fill", color);
   svg.appendChild(p);
-}});
+ }});
+
+// ----- Inner Ring Logic -----
+const innerTotal = 50;
+let innerPct = 0;
+let showInner = false;
+
+if (mode === "import" && filledPercentage > 100) {{
+  showInner = true;
+  innerPct = Math.min(innerTotal, Math.floor(filledPercentage - 100));
+}} else if (mode === "export" && filledPercentage < 0) {{
+  showInner = true;
+  innerPct = Math.min(innerTotal, Math.floor(-filledPercentage));
+}}
+
+if (showInner) {{
+  const centerX = 151.5;
+  const centerY = 148;
+  const radius  = 100;
+  const circ    = 2 * Math.PI * radius;
+
+  const base = document.createElementNS(svgNS, "circle");
+  base.setAttribute("cx", centerX);
+  base.setAttribute("cy", centerY);
+  base.setAttribute("r", radius);
+  base.setAttribute("fill", "none");
+  base.setAttribute("stroke", "#ACACAC");
+  base.setAttribute("stroke-width", 20);
+
+  orange.setAttribute("stroke-dashoffset", circ * innerPct / innerTotal);
+  const outerTotal = 100;
+  let outerPct = 0;
+  let showOuter = false;
+
+  if (mode === "export" && filledPercentage > 100) {{
+    showOuter = true;
+    outerPct = Math.min(outerTotal, Math.floor(filledPercentage - 100));
+  }} else if (mode === "import" && filledPercentage < 0) {{
+    showOuter = true;
+    outerPct = Math.min(outerTotal, Math.floor(-filledPercentage));
+  }}
+
+  if (showOuter) {{
+    const outRadius = 140;
+    const outCirc   = 2 * Math.PI * outRadius;
+
+    const baseOut = document.createElementNS(svgNS, "circle");
+    baseOut.setAttribute("cx", centerX);
+    baseOut.setAttribute("cy", centerY);
+    baseOut.setAttribute("r", outRadius);
+    baseOut.setAttribute("fill", "none");
+    baseOut.setAttribute("stroke", "#ACACAC");
+    baseOut.setAttribute("stroke-width", 10);
+    baseOut.setAttribute("transform", `rotate(-90 ${{centerX}} ${{centerY}}) scale(-1 1) translate(-303 0)`);
+    baseOut.setAttribute("stroke-dasharray", outCirc);
+    baseOut.setAttribute("stroke-dashoffset", 0);
+    svg.appendChild(baseOut);
+
+    const purple = document.createElementNS(svgNS, "circle");
+    purple.setAttribute("cx", centerX);
+    purple.setAttribute("cy", centerY);
+    purple.setAttribute("r", outRadius);
+    purple.setAttribute("fill", "none");
+    purple.setAttribute("stroke", "#815ED5");
+    purple.setAttribute("stroke-width", 10);
+    purple.setAttribute("transform", `rotate(-90 ${{centerX}} ${{centerY}}) scale(-1 1) translate(-303 0)`);
+    purple.setAttribute("stroke-dasharray", outCirc);
+    purple.setAttribute("stroke-dashoffset", outCirc - outCirc * outerPct / outerTotal);
+    svg.appendChild(purple);
+  }}
 </script>
+  base.setAttribute("stroke-dasharray", circ);
+  svg.appendChild(base);
+
+  const orange = document.createElementNS(svgNS, "circle");
+  orange.setAttribute("cx", centerX);
+  orange.setAttribute("cy", centerY);
+  orange.setAttribute("r", radius);
+  orange.setAttribute("fill", "none");
+  orange.setAttribute("stroke", "#F47B60");
+  orange.setAttribute("stroke-width", 20);
+  orange.setAttribute("transform", `rotate(0 ${{centerX}} ${{centerY}})`);
+  orange.setAttribute("stroke-dasharray", circ);
+  orange.setAttribute("stroke-dashoffset", circ * innerGrey / innerTotal);
+  svg.appendChild(orange);
+}}
+ </script>
 """
 
 # --------------------------------------------------
